@@ -12,10 +12,11 @@ DONE: reading/uploading files
 DONE: user messages must not be tall
 DONE: file upload-ui
 DONE: replace typing dots with spinning circle
+DONE: BUG: Files don't get uploaded if text is already on the input area.
 
 // For Alpha testing
 name
-BUG: Files don't get uploaded if text is already on the input area.
+
 remove mock replies/titles
 
 
