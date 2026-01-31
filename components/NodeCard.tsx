@@ -54,7 +54,7 @@ export const NodeCard = memo(({ data, selected }: NodeProps<NodeCardData>) => {
               {messages.length} MSGS
             </span>
           </div>
-          <h3 className={`text-[13px] font-bold text-white leading-tight truncate transition-all duration-300 ${title === '...' ? 'animate-pulse text-zinc-500' : ''}`}>
+          <h3 className={`text-[13px] font-bold text-white leading-tight better-words transition-all duration-300 ${title === '...' ? 'animate-pulse text-zinc-500' : ''}`}>
             {displayTitle || "Untitled Segment"}
           </h3>
         </div>
@@ -73,13 +73,13 @@ export const NodeCard = memo(({ data, selected }: NodeProps<NodeCardData>) => {
         </button>
       </div>
 
-      <div className="mt-1 border-t border-zinc-800/50 pt-2">
+     {/* <div className="mt-1 border-t border-zinc-800/50 pt-2">
         <p className="text-[10px] text-zinc-400 italic line-clamp-1 opacity-60 mb-1">Latest:</p>
         <p className="text-[10px] text-zinc-500 line-clamp-2 leading-relaxed font-medium">
           {lastMessage || "Empty sequence..."}
         </p>
       </div>
-      
+      */}
       {selected && (
         <div  />
       )}

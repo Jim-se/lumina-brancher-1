@@ -40,6 +40,7 @@ const CameraController: React.FC<{ currentNodeId: string | null; viewMode: 'chat
         // Shift camera slightly based on scale to keep node well-framed
         const targetX = node.position.x + 120;
         const targetY = node.position.y + 60;
+        
         setCenter(targetX, targetY, { zoom: 1.1, duration: 1200 });
       }
     } else if (viewMode === 'node') {

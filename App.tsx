@@ -1,4 +1,4 @@
-
+//n
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { ChatState, ChatNode, Message } from './types';
 import { ChatView } from './components/ChatView';
@@ -40,6 +40,7 @@ const App: React.FC = () => {
   });
 
   const [isGenerating, setIsGenerating] = useState(false);
+  const [selectedModel, setSelectedModel] = useState("gemini-3-flash-preview");
 
   // Add this near the top of your App component, after the useState declarations:
 
@@ -276,24 +277,60 @@ console.log('🟢 [OPTIMISTIC] Creating new node with temp ID:', tempNodeId);
     }))
 );
 
-    console.log(`🤖 [AI] Calling generateResponse`);
-    const responseText = await generateResponse(text, aiContext, files);
-
+    //console.log(`🤖 [AI] Calling generateResponse`);
+    console.log(`🤖 [AI] Starting Stream...`);
+    const stream = await generateResponse(text, aiContext, files, selectedModel);
     console.log(`🤖 [AI] Response received (${(performance.now() - t6).toFixed(0)}ms)`);
-    
+    let fullResponse = "";
+const aiMsgTimestamp = Date.now();
     const aiMsg: Message = { 
-      role: 'model', 
-      content: responseText, 
-      timestamp: Date.now(), 
-      ordinal: userMsg.ordinal + 1 
-    };
+  role: 'model', 
+  content: '', 
+  timestamp: aiMsgTimestamp, 
+  ordinal: userMsg.ordinal + 1 
+};
 
     // SHOW AI RESPONSE IMMEDIATELY (before DB saves!)
     console.log('🟢 [AI RESPONSE] Adding AI message to node:', optimisticNodeId);
 
     setWorkspace(prev => {
+  const node = prev.nodes[optimisticNodeId];
+  if (!node) return prev;
+
+  return {
+    ...prev,
+    nodes: {
+      ...prev.nodes,
+      [optimisticNodeId]: {
+        ...node,
+        messages: [...node.messages, aiMsg]
+      }
+    }
+  };
+});
+
+
+
+// Helper function to stream words gradually (simulates word-by-word effect)
+const streamWordsGradually = async (text: string, baseContent: string) => {
+  const words = text.split(/(\s+)/); // Split by whitespace but keep the spaces
+  let displayedContent = baseContent;
+  
+  for (const word of words) {
+    displayedContent += word;
+    
+    // Update UI with each word
+    setWorkspace(prev => {
       const node = prev.nodes[optimisticNodeId];
       if (!node) return prev;
+
+      const updatedMessages = [...node.messages];
+      const lastIndex = updatedMessages.length - 1;
+      
+      updatedMessages[lastIndex] = {
+        ...updatedMessages[lastIndex],
+        content: displayedContent
+      };
 
       return {
         ...prev,
@@ -301,11 +338,29 @@ console.log('🟢 [OPTIMISTIC] Creating new node with temp ID:', tempNodeId);
           ...prev.nodes,
           [optimisticNodeId]: {
             ...node,
-            messages: [...node.messages, aiMsg]
+            messages: updatedMessages
           }
         }
       };
     });
+    
+    // Small delay between words (adjust for speed: lower = faster)
+    await new Promise(resolve => setTimeout(resolve, 0)); // 30ms per word
+  }
+  
+  return displayedContent;
+};
+
+// Loop through the chunks as they arrive
+for await (const chunk of stream) {
+  // Extract text from the chunk
+  const chunkText = typeof chunk.text === 'function' ? chunk.text() : chunk.text || "";
+  
+  // Stream this chunk's words gradually instead of all at once
+  fullResponse = await streamWordsGradually(chunkText, fullResponse);
+}
+
+
 
     setIsGenerating(false); // User can see response now!
     console.log(`✅ [USER SEES RESPONSE] Time: ${(performance.now() - perfStart).toFixed(0)}ms`);
@@ -347,7 +402,7 @@ console.log('🟢 [OPTIMISTIC] Creating new node with temp ID:', tempNodeId);
     await dbService.createMessage({
       nodes_id: targetNodeId,
       role: 'model',
-      content: responseText,
+      content: fullResponse,
       ordinal: aiMsg.ordinal
     });
 
@@ -386,7 +441,7 @@ console.log('🟢 [DB COMPLETE] Replacing temp node:', tempNodeId, '→', target
 
     // Title generation (background)
     if (isNewConversation || isBranching) {
-      generateTitle(text, responseText).then(async (llmTitle) => {
+      generateTitle(text, fullResponse).then(async (llmTitle) => {
         try {
           await dbService.updateNodeTitle(targetNodeId, llmTitle);
           if (isNewConversation) {
@@ -601,7 +656,7 @@ console.log('🟢 [DB COMPLETE] Replacing temp node:', tempNodeId, '→', target
       
     </div>
   )}
-          <div className={`absolute inset-0 transition-all duration-170 ease-in-out ${workspace.viewMode === 'chat' ? 'blur-3xl grayscale opacity-10 scale-105 pointer-events-none' : 'opacity-100 scale-100'}`}>
+          <div className={`absolute inset-0 transition-all duration-170 ease-in-out ${workspace.viewMode === 'chat' ? 'blur-3xl grayscale opacity-10 scale-100 pointer-events-none' : 'opacity-100 scale-100'}`}>
             <NodeView 
               nodes={workspace.nodes} 
               rootNodeId={workspace.rootNodeId} 
@@ -624,6 +679,8 @@ console.log('🟢 [DB COMPLETE] Replacing temp node:', tempNodeId, '→', target
               onCancelBranch={() => setWorkspace(prev => ({ ...prev, branchingFromId: null }))}
               currentNodeId={workspace.currentNodeId}
               currentTitle={currentTitle}
+              selectedModel={selectedModel}
+              onModelSelect={setSelectedModel}
             />
           </div>
         </main>
