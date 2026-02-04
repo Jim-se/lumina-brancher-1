@@ -479,8 +479,8 @@ useEffect(() => {
         </svg>
     </div>
     <div>
-        <h1 className="text-[13px] font-black tracking-[0.4em] uppercase text-white">LUMINA</h1>
-        <p className="text-[8px] font-bold tracking-[0.2em] uppercase text-zinc-600">Topological Brancher v2.0</p>
+        <h1 className="text-[13px] font-black tracking-[0.4em] uppercase text-white">LLM-Brancher</h1>
+        <p className="text-[8px] font-bold tracking-[0.2em] uppercase text-zinc-600">Alpha Version</p>
     </div>
 </div>
 
