@@ -104,6 +104,26 @@ useEffect(() => {
     return endsWithLetter ? `${parentId}.${siblingsCount + 1}` : `${parentId}.${String.fromCharCode(97 + siblingsCount)}`;
   };
 
+  const handleReportBug = async () => {
+    const description = prompt("Describe the bug (what happened?):");
+    if (!description) return;
+
+    try {
+      // Optional: Capture basic browser info
+      const debugInfo = JSON.stringify({
+        userAgent: navigator.userAgent,
+        screen: `${window.innerWidth}x${window.innerHeight}`,
+        url: window.location.href,
+        node: workspace.currentNodeId // helpful to know where they were
+      }, null, 2);
+
+      await dbService.reportBug(description, debugInfo);
+      alert("Bug reported! Thanks for helping.");
+    } catch (err) {
+      alert("Failed to send report. Irony.");
+      console.error(err);
+    }
+  };
   const handleDeleteConversation = async (convId: string, e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent selecting the conversation when clicking delete
     
@@ -464,7 +484,7 @@ useEffect(() => {
 
   const currentTitle = useMemo(() => {
     const node = workspace.currentNodeId ? workspace.nodes[workspace.currentNodeId] : null;
-    return node?.title && node.title !== '...' ? node.title : "Lumina Session";
+    return node?.title && node.title !== '...' ? node.title : "LLM-Brancher Session";
   }, [workspace.nodes, workspace.currentNodeId]);
 
   return (
@@ -578,6 +598,13 @@ useEffect(() => {
   </div>
 
   <div className="flex items-center gap-4">
+    <button 
+  onClick={handleReportBug}
+  className="text-[10px] opacity-60 text-red-500 hover:text-red-400 font-bold uppercase tracking-widest flex items-center gap-2"
+>
+  
+  Report Bug/Feedback
+</button>
     <button
       onClick={() => {
             console.log('🔄 [VIEW SWITCH] Switching from', workspace.viewMode, 'to', workspace.viewMode === 'chat' ? 'node' : 'chat');

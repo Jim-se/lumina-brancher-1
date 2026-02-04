@@ -110,6 +110,21 @@ export const dbService = {
     if (error) throw error;
   },
 
+  async reportBug(description: string, logs: string = "") {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { error } = await supabase
+      .from('bug_reports')
+      .insert({
+        user_id: user.id,
+        description: description,
+        logs: logs
+      });
+
+    if (error) throw error;
+  },
+
   async createNode(payload: { 
     id?: string, // <--- ADD THIS
     conversations_id: string, 
