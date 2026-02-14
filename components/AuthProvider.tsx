@@ -50,8 +50,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 const Auth: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  // 1. Add state for the name
+  const [fullName, setFullName] = useState(''); 
   const [loading, setLoading] = useState(false);
-  const [mode, setMode] = useState<'signin' | 'signup'>('signin');
+  const [mode, setMode] = useState<'signin' | 'signup'>('signup');
   const [message, setMessage] = useState('');
 
   const handleAuth = async (e: React.FormEvent) => {
@@ -61,8 +63,38 @@ const Auth: React.FC = () => {
 
     try {
       if (mode === 'signup') {
-        const { error } = await supabase.auth.signUp({ email, password });
+        // 2. Pass metadata during sign up
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: {
+              full_name: fullName, // This saves to auth.users metadata
+              emailRedirectTo: `${window.location.origin}/`,
+            },
+          },
+        });
+
         if (error) throw error;
+
+        // 3. Handle the public.users table safely
+        if (data.user) {
+          // We use UPSERT instead of INSERT.
+          // This fixes the 409 error by updating the row if the Trigger already created it.
+          const { error: dbError } = await supabase
+            .from('users')
+            .upsert({
+              id: data.user.id,
+              full_name: fullName,
+              // Add other fields here if needed, e.g. avatar_url: '',
+            });
+
+          if (dbError) {
+             // Optional: Log this error, but don't block the user since Auth succeeded
+             console.error('Error saving user details:', dbError);
+          }
+        }
+
         setMessage('Check your email for the confirmation link!');
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
@@ -91,6 +123,21 @@ const Auth: React.FC = () => {
         </div>
 
         <form onSubmit={handleAuth} className="space-y-4">
+          
+          {/* 4. Render Name Input only in Signup mode */}
+          {mode === 'signup' && (
+            <div>
+              <input
+                type="text"
+                placeholder="Full Name"
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                className="w-full px-4 py-3 bg-zinc-900 border border-zinc-800 rounded-xl text-white placeholder-zinc-600 focus:outline-none focus:border-blue-500 transition-colors"
+                required
+              />
+            </div>
+          )}
+
           <div>
             <input
               type="email"
@@ -126,7 +173,10 @@ const Auth: React.FC = () => {
 
           <button
             type="button"
-            onClick={() => setMode(mode === 'signin' ? 'signup' : 'signin')}
+            onClick={() => {
+                setMode(mode === 'signin' ? 'signup' : 'signin');
+                setMessage(''); // Clear message on toggle
+            }}
             className="w-full text-xs text-zinc-500 hover:text-blue-500 transition-colors uppercase tracking-wider"
           >
             {mode === 'signin' ? 'Need an account? Sign up' : 'Have an account? Sign in'}

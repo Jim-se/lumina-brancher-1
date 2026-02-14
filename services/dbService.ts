@@ -11,6 +11,30 @@ export const dbService = {
     return data;
   },
 
+  // Add this inside your dbService object
+  async fetchUserProfile(): Promise<{ fullName: string | null; email: string | undefined; createdAt: string | undefined } | null> {
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (!user) return null;
+
+    const { data, error } = await supabase
+      .from('users')
+      .select('full_name')
+      .eq('id', user.id)
+      .single();
+      
+    if (error) {
+      console.warn("Could not fetch user profile:", error);
+      return { fullName: null, email: user.email, createdAt: user.created_at };
+    }
+    
+    return { 
+      fullName: data?.full_name || null, 
+      email: user.email,
+      createdAt: user.created_at
+    };
+  },
+
   async fetchConversationDetail(conversationId: string) {
     // 1. Fetch nodes
     const { data: nodesData, error: nodesError } = await supabase

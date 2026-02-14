@@ -180,10 +180,10 @@ export const NodeView: React.FC<NodeViewProps> = (props) => {
         >
           <Background 
             variant={BackgroundVariant.Dots}
-            color="#111" 
+            color="#9b9b9b" 
             gap={20} 
             size={1} 
-            className="opacity-50"
+            className=""
           />
           <Controls position="bottom-right" className="bg-zinc-900 border-zinc-800 shadow-2xl" />
           <MiniMap 

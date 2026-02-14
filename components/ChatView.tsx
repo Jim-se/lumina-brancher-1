@@ -1,10 +1,8 @@
-
 import React, { useRef, useEffect, useMemo, useState } from 'react';
 import { ChatNode, Message } from '../types';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { vs } from 'react-syntax-highlighter/dist/esm/styles/hljs';
 
 interface ChatViewProps {
   history: ChatNode[]; 
@@ -19,16 +17,40 @@ interface ChatViewProps {
   onModelSelect: (modelId: string) => void;
 }
 
+// UPDATE: OpenRouter Model IDs with Descriptions and Flags
 const MODELS = [
-  { id: 'gemini-3-pro-preview', name: 'Gemini 3.0 Pro', provider: 'gemini' },
-  { id: 'gemini-3-flash-preview', name: 'Gemini 3.0 Flash', provider: 'gemini' },
-  { id: 'gpt-5', name: 'GPT-5', provider: 'openai'},
-  { id: 'gpt-4o', name: 'GPT-4o', provider: 'openai' },
-  { id: 'gpt-4-turbo', name: 'GPT-4 Turbo', provider: 'openai' },
-  { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo', provider: 'openai' },
-  
-  //{ id: 'gemini-3-pro', name: 'Gemini 3 Pro' },
+  // Google
+  { id: 'google/gemini-2.0-flash-lite-preview-02-05:free', name: 'Gemini 2.0 Flash Lite', provider: 'google', description: 'Lightning-fast with surprising capability', isPremium: false },
+  { id: 'google/gemini-2.0-pro-exp-02-05:free', name: 'Gemini 2.0 Pro Exp', provider: 'google', description: 'Google\'s newest flagship with advanced reasoning', isPremium: true },
+  { id: 'google/gemini-pro-1.5', name: 'Gemini 1.5 Pro', provider: 'google', description: 'High fidelity generation built on Gemini', isPremium: true },
+  // Arcee
+  { id: 'arcee-ai/trinity-large-preview:free', name: 'Trinity Large (Free)', provider: 'arcee', description: 'Advanced preview model from Arcee AI', isPremium: false },
+  // OpenAI
+  { id: 'openai/gpt-4o', name: 'GPT-4o', provider: 'openai', description: 'OpenAI\'s latest with breakthrough speed and intelligence', isPremium: true },
+  { id: 'openai/gpt-4o-mini', name: 'GPT-4o Mini', provider: 'openai', description: 'Fast, affordable model for everyday tasks', isPremium: false },
+  { id: 'openai/o1-preview', name: 'GPT-o1 Preview', provider: 'openai', description: 'Advanced reasoning and problem-solving capabilities', isPremium: true },
+  // Anthropic
+  { id: 'anthropic/claude-3.5-sonnet', name: 'Claude Sonnet 3.5', provider: 'anthropic', description: 'Anthropic\'s most advanced Sonnet yet', isPremium: true },
 ];
+
+// Helper to render smaller provider icons in the popover sidebar
+const ProviderIcon = ({ provider, isActive }: { provider: string, isActive: boolean }) => {
+  const className = `w-5 h-5 transition-colors ${isActive ? 'text-white' : 'text-zinc-500 group-hover:text-zinc-300'}`;
+  switch (provider) {
+    case 'all':
+      return <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>;
+    case 'openai':
+      return <svg className={className} viewBox="0 0 24 24" fill="currentColor"><path d="M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A6.0651 6.0651 0 0 0 19.0192 19.818a5.9847 5.9847 0 0 0 3.9977-2.9001 6.051 6.051 0 0 0-.735-7.0968zM10.8422 20.2505a4.062 4.062 0 0 1-2.4276-1.0776l.0448-.0258 3.5148-2.0298a.566.566 0 0 0 .2852-.4913v-4.757l2.8722 1.6585a.0467.0467 0 0 1 .0223.038v4.2023a4.062 4.062 0 0 1-4.3117 2.4827zm-5.717-3.0487a4.053 4.053 0 0 1-.9512-2.4842l.0442.0254 3.5135 2.029a.5665.5665 0 0 0 .5689 0l4.1198-2.3787v3.317a.0467.0467 0 0 1-.0236.0402l-3.6393 2.1013a4.053 4.053 0 0 1-3.6323-.65zm-2.122-6.526a4.062 4.062 0 0 1 1.4746-2.222l-.0218.0386-3.5144 2.0298a.566.566 0 0 0-.2851.4913v4.757l2.8723-1.6585a.0467.0467 0 0 1 .046-.0011l3.6385-2.1012a4.062 4.062 0 0 1-4.21-.3339zm10.7495-5.91a4.053 4.053 0 0 1 2.4278 1.0776l-.0448.0258-3.5148 2.0298a.566.566 0 0 0-.2852.4913v4.757l-2.8722-1.6585a.0467.0467 0 0 1-.0223-.038v-4.2023a4.053 4.053 0 0 1 4.3115-2.4827zm5.717 3.0487a4.062 4.062 0 0 1 .9512 2.4842l-.0442-.0254-3.5135-2.029a.5665.5665 0 0 0-.5689 0l-4.1198 2.3787v-3.317a.0467.0467 0 0 1 .0236-.0402l3.6393-2.1013a4.062 4.062 0 0 1 3.6323.65zm2.122 6.526a4.053 4.053 0 0 1-1.4746 2.222l.0218-.0386 3.5144-2.0298a.566.566 0 0 0 .2851-.4913v-4.757l-2.8723 1.6585a.0467.0467 0 0 1-.046.0011l-3.6385 2.1012a4.053 4.053 0 0 1 4.21.3339zM12 14.654l-2.298-1.3267v-2.6534L12 9.3473l2.298 1.3266v2.6534L12 14.654z" /></svg>;
+    case 'google':
+      return <svg className={className} viewBox="0 0 24 24" fill="currentColor"><path d="M12.545,10.239v3.821h5.445c-0.712,2.315-2.647,3.972-5.445,3.972c-3.332,0-6.033-2.701-6.033-6.032s2.701-6.032,6.033-6.032c1.498,0,2.866,0.549,3.921,1.453l2.814-2.814C17.503,2.988,15.139,2,12.545,2C7.021,2,2.543,6.477,2.543,12s4.478,10,10.002,10c8.396,0,10.249-7.85,9.426-11.761H12.545z" /></svg>;
+    case 'anthropic':
+      return <svg className={className} viewBox="0 0 24 24" fill="currentColor"><path d="M21.05 18.98L12 3.32 2.95 18.98h2.36l6.69-11.58 6.69 11.58h2.36z" /></svg>;
+    case 'arcee':
+      return <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>;
+    default:
+      return <div className={`w-5 h-5 rounded-full border-2 ${isActive ? 'border-white' : 'border-zinc-500 group-hover:border-zinc-300'}`} />;
+  }
+};
 
 export const ChatView: React.FC<ChatViewProps> = ({ 
   history, 
@@ -43,86 +65,109 @@ export const ChatView: React.FC<ChatViewProps> = ({
   onModelSelect,
 }) => {
   const [input, setInput] = React.useState('');
-  const [files, setFiles] = useState<File[]>([]); // New state for files
+  const [files, setFiles] = useState<File[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null); // New ref for file input
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const isAtBottomRef = useRef(true);
   const [userHasScrolledUp, setUserHasScrolledUp] = useState(false);
-  const [isModelMenuOpen, setIsModelMenuOpen] = useState(false);
-  const modelMenuRef = useRef<HTMLDivElement>(null);
   const [showMinimap, setShowMinimap] = useState(false);
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
 
+  // --- COMPACT MODEL MENU STATE ---
+  const [isModelMenuOpen, setIsModelMenuOpen] = useState(false);
+  const [selectedProviderTab, setSelectedProviderTab] = useState('all');
+  const [modelSearchQuery, setModelSearchQuery] = useState('');
+  const modelMenuRef = useRef<HTMLDivElement>(null);
+
+  const providers = ['all', ...Array.from(new Set(MODELS.map(m => m.provider)))];
+
+  const filteredModels = useMemo(() => {
+    return MODELS.filter(m => {
+      const matchesProvider = selectedProviderTab === 'all' || m.provider === selectedProviderTab;
+      const matchesSearch = m.name.toLowerCase().includes(modelSearchQuery.toLowerCase()) || 
+                            m.description.toLowerCase().includes(modelSearchQuery.toLowerCase());
+      return matchesProvider && matchesSearch;
+    });
+  }, [selectedProviderTab, modelSearchQuery]);
+
+  // Handle closing menu when clicking outside or pressing Escape
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (modelMenuRef.current && !modelMenuRef.current.contains(event.target as Node)) {
         setIsModelMenuOpen(false);
       }
     };
-    document.addEventListener('mousedown', handleClickOutside);
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsModelMenuOpen(false);
+    };
+    
+    if (isModelMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      window.addEventListener('keydown', handleKeyDown);
+    }
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
+      window.removeEventListener('keydown', handleKeyDown);
     };
-  }, []);
-    
-  // Modified auto-scroll effect - respect user intent
+  }, [isModelMenuOpen]);
+  // --------------------------------
+
   useEffect(() => {
     if (scrollRef.current && !userHasScrolledUp) {
       if (isAtBottomRef.current) {
         scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
       }
     }
-  }, [history, userHasScrolledUp]); // Add userHasScrolledUp dependency
+  }, [history, userHasScrolledUp]);
 
-  // Force snap only on generation START, and reset the flag
   useEffect(() => {
     if (isGenerating && scrollRef.current) {
       isAtBottomRef.current = true;
-      setUserHasScrolledUp(false); // Reset when new generation starts
+      setUserHasScrolledUp(false);
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [isGenerating]);
 
+  const handleCopyMessage = (content: string, msgId: string) => {
+    navigator.clipboard.writeText(content);
+    setCopiedMessageId(msgId);
+    setTimeout(() => {
+      setCopiedMessageId(null);
+    }, 2000);
+  };
+
   const handleScroll = () => {
-  if (scrollRef.current) {
-    const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
-    const distanceToBottom = scrollHeight - scrollTop - clientHeight;
-    
-    // User scrolled up even a tiny bit? Unlock immediately
-    if (distanceToBottom > 10) {  // Very low threshold
-      isAtBottomRef.current = false;
-      setUserHasScrolledUp(true);
-    } else {
-      isAtBottomRef.current = true;
-      setUserHasScrolledUp(false);
+    if (scrollRef.current) {
+      const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
+      const distanceToBottom = scrollHeight - scrollTop - clientHeight;
+      
+      if (distanceToBottom > 10) {
+        isAtBottomRef.current = false;
+        setUserHasScrolledUp(true);
+      } else {
+        isAtBottomRef.current = true;
+        setUserHasScrolledUp(false);
+      }
+
+      setShowMinimap(true);
+      if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
+      scrollTimeoutRef.current = setTimeout(() => {
+        setShowMinimap(false);
+      }, 1500);
     }
-
-    // Minimap logic
-    setShowMinimap(true);
-    if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
-    scrollTimeoutRef.current = setTimeout(() => {
-      setShowMinimap(false);
-    }, 1500);
-  }
-};
-
+  };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-  console.log('🔍 handleFileSelect called!', e.target.files?.length, 'files');
-  if (e.target.files && e.target.files.length > 0) {
-    const newFiles = Array.from(e.target.files); // ✅ Capture files FIRST
-    setFiles((prev) => {
-      console.log('📦 Previous files:', prev.length, 'Adding:', newFiles.length);
-      return [...prev, ...newFiles];
-    });
-    // Reset AFTER, with setTimeout
-    setTimeout(() => {
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    }, 0);
-  }
-};
+    if (e.target.files && e.target.files.length > 0) {
+      const newFiles = Array.from(e.target.files);
+      setFiles((prev) => [...prev, ...newFiles]);
+      setTimeout(() => {
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      }, 0);
+    }
+  };
 
-  // ADD THIS FUNCTION:
   const removeFile = (index: number) => {
     setFiles((prev) => prev.filter((_, i) => i !== index));
   };
@@ -130,16 +175,12 @@ export const ChatView: React.FC<ChatViewProps> = ({
   const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
     const items = e.clipboardData.items;
     const pastedFiles: File[] = [];
-
     for (let i = 0; i < items.length; i++) {
       if (items[i].kind === 'file' && items[i].type.startsWith('image/')) {
         const file = items[i].getAsFile();
-        if (file) {
-          pastedFiles.push(file);
-        }
+        if (file) pastedFiles.push(file);
       }
     }
-
     if (pastedFiles.length > 0) {
       setFiles((prev) => [...prev, ...pastedFiles]);
     }
@@ -147,26 +188,16 @@ export const ChatView: React.FC<ChatViewProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-
     if (!input.trim() && files.length === 0 || isGenerating) return;
     onSendMessage(input, files);
     setInput('');
     setFiles([]);
-
     setTimeout(() => {
-    const textarea = document.querySelector('textarea');
-    if (textarea) {
-      textarea.style.height = 'auto';
-    }
-  }, 0);
+      const textarea = document.querySelector('textarea');
+      if (textarea) textarea.style.height = 'auto';
+    }, 0);
   };
 
-  const currentHierarchicalId = useMemo(() => {
-    if (history.length === 0) return null;
-    return history[history.length - 1].hierarchicalID;
-  }, [history]);
-
-  // Flatten messages from the history nodes
   const allMessages: { msg: Message, nodeId: string, isLastInNode: boolean }[] = [];
   history.forEach((node) => {
     node.messages.forEach((msg, idx) => {
@@ -180,7 +211,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
 
   return (
     <div className="w-full h-full flex flex-col bg-transparent overflow-hidden pt-20 relative">
-      
+
       {/* CENTERED EMPTY STATE */}
       {allMessages.length === 0 && !isGenerating && (
         <div className="absolute inset-0 flex flex-col items-center justify-center text-zinc-700 gap-4 pointer-events-none z-0">
@@ -196,83 +227,88 @@ export const ChatView: React.FC<ChatViewProps> = ({
       {/* SCROLLABLE MESSAGE AREA */}
       <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto custom-scrollbar relative z-10">
         <div className="max-w-3xl mx-auto px-6 pt-8 pb-12 space-y-8">
-          {allMessages.map(({ msg, nodeId }, idx) => (
-            <div id={`msg-${idx}`} key={`${nodeId}-${idx}`} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} group animate-in fade-in slide-in-from-bottom-2 duration-500`}>
-        <div className={`max-w-full px-5 py-3 rounded-3xl relative transition-all duration-300 ${msg.role === 'user' ? 'bg-zinc-800/60 text-white rounded-tr-none border border-zinc-700/30' : 'bg-transparent text-zinc-200 rounded-tl-none border-none pl-0'}`}>                <ReactMarkdown components={{
-                  code: ({node, inline, className, children, ...props}: any) => {
-                    const match = /language-(\w+)/.exec(className || '');
-                    const codeContent = String(children).replace(/\n$/, '');
-                    
-                    if (inline) return <code className="bg-zinc-800 text-blue-400 px-2 py-1 rounded text-sm font-mono" {...props}>{children}</code>;
-                    
-                    return (
-                      <div className="relative group/code my-4 rounded-lg overflow-hidden border border-zinc-700/50">
-                        {/* Header/Title Bar */}
-                        <div className="flex items-center justify-between px-4 py-2 bg-zinc-900 border-b border-zinc-800 text-xs text-zinc-400">
-                           <span className="font-mono">{match ? match[1] : 'code'}</span>
-                           <button 
-                             onClick={() => {
-                               navigator.clipboard.writeText(codeContent);
-                               // You might want to add a toast notification here
-                             }}
-                             className="flex items-center gap-1.5 hover:text-white transition-colors"
-                           >
-                             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
-                             <span>Copy</span>
-                           </button>
-                        </div>
+          {allMessages.map(({ msg, nodeId }, idx) => {
+            const uniqueMsgId = `${nodeId}-${idx}`; 
+            
+            return (
+              <div id={`msg-${idx}`} key={uniqueMsgId} className={`flex w-full ${msg.role === 'user' ? 'justify-end' : 'justify-start'} group animate-in fade-in slide-in-from-bottom-2 duration-500`}>
+                <div className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'} max-w-full`}>
+                  <div className={`max-w-full px-5 py-3 rounded-3xl relative transition-all duration-300 ${msg.role === 'user' ? 'bg-zinc-800/60 text-white rounded-tr-none border border-zinc-700/30' : 'bg-transparent text-zinc-200 rounded-tl-none border-none pl-0'}`}>                
+                    <ReactMarkdown components={{
+                      code: ({node, inline, className, children, ...props}: any) => {
+                        const match = /language-(\w+)/.exec(className || '');
+                        const codeContent = String(children).replace(/\n$/, '');
                         
-                        {/* Code Block */}
-                         {match ? (
-                            <SyntaxHighlighter 
-                              style={vscDarkPlus} 
-                              language={match[1]} 
-                              PreTag="div" 
-                              className="!my-0 !bg-[#0d0d0d] custom-scrollbar" 
-                              customStyle={{ margin: 0, padding: '1.5rem', background: '#0d0d0d' }}
-                              {...props}
-                            >
-                              {codeContent}
-                            </SyntaxHighlighter>
-                        ) : (
-                           <div className="p-4 bg-[#0d0d0d] overflow-x-auto custom-scrollbar">
-                              <code className="font-mono text-sm text-zinc-200" {...props}>{children}</code>
-                           </div>
-                        )}
-                      </div>
-                    );
-                  },
-                  // --- CUSTOM TYPOGRAPHY (From User Request) ---
+                        if (inline) return <code className="bg-zinc-800 text-blue-400 px-2 py-1 rounded text-sm font-mono" {...props}>{children}</code>;
+                        
+                        return (
+                          <div className="relative group/code my-4 rounded-lg overflow-hidden border border-zinc-700/50">
+                            <div className="flex items-center justify-between px-4 py-2 bg-zinc-900 border-b border-zinc-800 text-xs text-zinc-400">
+                               <span className="font-mono">{match ? match[1] : 'code'}</span>
+                               <button 
+                                 onClick={() => navigator.clipboard.writeText(codeContent)}
+                                 className="flex items-center gap-1.5 hover:text-white transition-colors"
+                               >
+                                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                                 <span>Copy</span>
+                               </button>
+                            </div>
+                             {match ? (
+                                <SyntaxHighlighter 
+                                  style={vscDarkPlus} 
+                                  language={match[1]} 
+                                  PreTag="div" 
+                                  className="!my-0 !bg-[#0d0d0d] custom-scrollbar" 
+                                  customStyle={{ margin: 0, padding: '1.5rem', background: '#0d0d0d' }}
+                                  {...props}
+                                >
+                                  {codeContent}
+                                </SyntaxHighlighter>
+                            ) : (
+                               <div className="p-4 bg-[#0d0d0d] overflow-x-auto custom-scrollbar">
+                                  <code className="font-mono text-sm text-zinc-200" {...props}>{children}</code>
+                               </div>
+                            )}
+                          </div>
+                        );
+                      },
                       h1: ({node, ...props}) => <h1 className="text-2xl font-bold mb-4 text-white" {...props} />,
                       h2: ({node, ...props}) => <h2 className="text-xl font-bold mb-3 text-white" {...props} />,
                       h3: ({node, ...props}) => <h3 className="text-lg font-bold mb-2 text-white" {...props} />,
-                      p: ({node, ...props}) => (
-                            <p 
-                              className={`leading-relaxed ${msg.role === 'user' ? 'mb-0' : 'mb-4 text-zinc-300'}`} 
-                              {...props} 
-                            />
-                          ),                      
+                      p: ({node, ...props}) => <p className={`leading-relaxed ${msg.role === 'user' ? 'mb-0' : 'mb-4 text-zinc-300'}`} {...props} />,                      
                       ul: ({node, ...props}) => <ul className="list-disc list-inside mb-4 space-y-2 text-zinc-300" {...props} />,
                       ol: ({node, ...props}) => <ol className="list-decimal list-inside mb-4 space-y-2 text-zinc-300" {...props} />,
                       li: ({node, ...props}) => <li className="text-zinc-300" {...props} />,
                       strong: ({node, ...props}) => <strong className="font-bold text-white" {...props} />,
                       a: ({node, ...props}) => <a className="text-blue-400 hover:text-blue-300 underline" target="_blank" rel="noopener noreferrer" {...props} />,
-                      blockquote: ({node, ...props}) => <blockquote className="border-l-4 border-zinc-600 pl-4 italic text-zinc-400 my-4" {...props} />,  }}>
-                  {msg.content}
-                </ReactMarkdown>
-                {msg.role === 'model' && (
-                  <div className="mt-2 flex justify-end opacity-40 group-hover:opacity-100 transition-all">
-                    <button onClick={() => onBranch(nodeId)} className="flex items-center gap-2 text-zinc-500 hover:text-blue-400 transition-colors py-1 pl-0 pr-2">
-                       <span className="text-[10px] uppercase font-bold tracking-widest">Create new branch</span>
-                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                      </svg>
+                      blockquote: ({node, ...props}) => <blockquote className="border-l-4 border-zinc-600 pl-4 italic text-zinc-400 my-4" {...props} />,  
+                    }}>
+                      {msg.content}
+                    </ReactMarkdown>
+                  </div>
+
+                  <div className={`mt-1.5 flex items-center gap-3 opacity-40 group-hover:opacity-100 focus-within:opacity-100 transition-all ${msg.role === 'user' ? 'text-zinc-500 pr-2' : 'text-zinc-500 pl-1'}`}>
+                    {msg.role === 'model' && (
+                      <button onClick={() => onBranch(nodeId)} className="flex items-center gap-1.5 hover:text-blue-400 transition-colors py-1">
+                        <span className="text-[10px] uppercase font-bold tracking-widest">Create new branch</span>
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" /></svg>
+                      </button>
+                    )}
+                    <button onClick={() => handleCopyMessage(msg.content, uniqueMsgId)} className="flex items-center gap-1.5 hover:text-blue-400 transition-colors py-1">
+                      <span className="text-[10px] uppercase font-bold tracking-widest">
+                        {copiedMessageId === uniqueMsgId ? 'Copied!' : 'Copy'}
+                      </span>
+                      {copiedMessageId === uniqueMsgId ? (
+                        <svg className="w-3.5 h-3.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                      ) : (
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                      )}
                     </button>
                   </div>
-                )}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
 
           {isGenerating && (
             <div className="flex justify-start pl-8 py-2">
@@ -302,21 +338,16 @@ export const ChatView: React.FC<ChatViewProps> = ({
               key={i}
               onClick={() => document.getElementById(`msg-${i}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
               className={`w-full rounded-sm cursor-pointer transition-all ${
-                m.msg.role === 'user' 
-                  ? 'bg-blue-500 opacity-60 hover:opacity-100' 
-                  : 'bg-zinc-500 opacity-40 hover:opacity-100'
+                m.msg.role === 'user' ? 'bg-blue-500 opacity-60 hover:opacity-100' : 'bg-zinc-500 opacity-40 hover:opacity-100'
               }`}
-              style={{
-                height: `${Math.max(4, Math.min((m.msg.content.length / 50), 60))}px`,
-                minHeight: '8px'
-              }}
+              style={{ height: `${Math.max(4, Math.min((m.msg.content.length / 50), 60))}px`, minHeight: '8px' }}
               title={`${m.msg.role}: ${m.msg.content.substring(0, 20)}...`}
             />
           ))}
         </div>
       </div>
 
-      <div className="w-full bg-gradient-to-t from-black via-black/80 to-transparent pb-10 pt-6">
+      <div className="w-full bg-gradient-to-t from-black via-black/80 to-transparent pb-10 pt-6 z-20">
         <div className="max-w-3xl mx-auto px-6">
           {isBranching && (
             <div className="flex items-center justify-between px-6 py-3 bg-blue-600/10 border border-blue-500/30 text-blue-400 rounded-t-2xl mb-[-1px] mx-2 animate-in slide-in-from-bottom-2">
@@ -349,7 +380,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
             </div>
           )}
            
-           <form onSubmit={handleSubmit} className="w-full flex flex-col gap-2 px-3 pb-3 pt-2">
+           <form onSubmit={handleSubmit} className="w-full flex flex-col gap-2 px-3 pb-3 pt-2 relative">
               
               <input 
                 type="file" 
@@ -371,11 +402,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
                 }}
                 placeholder={isBranching ? "Type your message..." : "Type your message..."}
                 className="w-full bg-transparent border-none px-2 py-2 text-base font-medium focus:outline-none placeholder:text-zinc-600 text-white resize-none overflow-y-auto custom-scrollbar min-h-[44px]"
-                style={{
-                  minHeight: '44px',
-                  maxHeight: '200px',
-                  height: 'auto'
-                }}
+                style={{ minHeight: '44px', maxHeight: '200px', height: 'auto' }}
                 rows={1}
                 onInput={(e) => {
                   const target = e.target as HTMLTextAreaElement;
@@ -384,13 +411,13 @@ export const ChatView: React.FC<ChatViewProps> = ({
                 }}
               />
 
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
+              <div className="flex items-center justify-between relative">
+                <div className="flex items-center gap-2" ref={modelMenuRef}>
                     <button
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
                         disabled={isGenerating}
-                        className="p-2 text-zinc-400 hover:text-blue-400  rounded-full transition-all disabled:opacity-50"
+                        className="p-2 text-zinc-400 hover:text-blue-400 rounded-full transition-all disabled:opacity-50"
                         title="Attach files"
                     >
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -398,35 +425,99 @@ export const ChatView: React.FC<ChatViewProps> = ({
                         </svg>
                     </button>
 
-                   {/* Model Dropdown */}
-                   <div className="relative" ref={modelMenuRef}>
-                     <button 
-                        type="button" 
-                        onClick={() => setIsModelMenuOpen(!isModelMenuOpen)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium text-zinc-400 hover:text-white transition-all group"
-                      >
-                        <span>{MODELS.find(m => m.id === selectedModel)?.name || 'Select Model'}</span>
-                        <svg className={`w-3 h-3 text-zinc-600 group-hover:text-zinc-400 transition-transform ${isModelMenuOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-                     </button>
-                     
-                     {isModelMenuOpen && (
-                        <div className="absolute bottom-full left-0 mb-2 w-48 bg-[#0a0a0a] border border-zinc-800 rounded-xl shadow-2xl overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-200">
-                          {MODELS.map((model) => (
-                            <button
-                              key={model.id}
-                              type="button"
-                              onClick={() => {
-                                onModelSelect(model.id);
-                                setIsModelMenuOpen(false);
-                              }}
-                              className={`w-full text-left px-4 py-2.5 text-xs font-medium transition-colors ${selectedModel === model.id ? 'bg-zinc-900 text-white' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/50'}`}
+                   {/* MODAL TRIGGER BUTTON */}
+                   <button 
+                      type="button" 
+                      onClick={() => setIsModelMenuOpen(!isModelMenuOpen)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium text-zinc-400 hover:text-white transition-all group"
+                    >
+                      <span>{MODELS.find(m => m.id === selectedModel)?.name || 'Select Model'}</span>
+                      <svg className={`w-3.5 h-3.5 transition-transform ${isModelMenuOpen ? 'rotate-180 text-white' : 'text-zinc-500 group-hover:text-zinc-300'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l4-4 4 4m0 6l-4 4-4-4" /></svg>
+                   </button>
+
+                   {/* COMPACT POPOVER MENU */}
+                   {isModelMenuOpen && (
+                      <div className="absolute bottom-[calc(100%+16px)] left-0 w-[420px] max-h-[400px] bg-zinc-900border border-zinc-800 rounded-2xl flex overflow-hidden shadow-2xl z-50 animate-in fade-in slide-in-from-bottom-2 duration-200">
+                        {/* Narrow Sidebar */}
+                        <div className="w-14 bg-zinc-950 border-r border-zinc-800/80 flex flex-col items-center py-3 gap-3">
+                          {providers.map(p => (
+                            <button 
+                              key={p} 
+                              onClick={() => setSelectedProviderTab(p)} 
+                              title={p.charAt(0).toUpperCase() + p.slice(1)}
+                              className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all group ${
+                                selectedProviderTab === p ? 'bg-zinc-800 shadow-inner' : 'hover:bg-zinc-800/50'
+                              }`}
                             >
-                              {model.name}
+                              <ProviderIcon provider={p} isActive={selectedProviderTab === p} />
                             </button>
                           ))}
                         </div>
-                     )}
-                   </div>
+
+                        {/* Main Content */}
+                        <div className="flex-1 flex flex-col bg-[#111111] min-w-0">
+                          {/* Compact Header & Search */}
+                          <div className="p-3 border-b border-zinc-800/80 space-y-2.5">
+                            <div className="flex items-center justify-between px-1">
+                              <span className="text-[13px] font-semibold text-white">Models</span>
+                              <button className="text-[10px] uppercase tracking-wider font-bold bg-blue-500/10 text-blue-400 px-2 py-1 rounded hover:bg-blue-500/20 transition-colors">
+                                Unlock All $8/mo
+                              </button>
+                            </div>
+                            <div className="relative flex items-center">
+                              <svg className="absolute left-3 w-4 h-4 text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                              <input 
+                                type="text"
+                                value={modelSearchQuery}
+                                onChange={(e) => setModelSearchQuery(e.target.value)}
+                                placeholder="Search models..."
+                                className="w-full bg-zinc-900/50 border border-zinc-800 text-xs text-white rounded-lg py-2 pl-9 pr-3 focus:outline-none focus:border-zinc-700 focus:bg-zinc-900 transition-all"
+                              />
+                            </div>
+                          </div>
+
+                          {/* Condensed Scrollable List */}
+                          <div className="flex-1 overflow-y-auto p-2 space-y-0.5 custom-scrollbar">
+                            {filteredModels.length === 0 ? (
+                              <div className="flex flex-col items-center justify-center h-24 text-xs text-zinc-500">
+                                <p>No models found.</p>
+                              </div>
+                            ) : (
+                              filteredModels.map((model) => (
+                                <div 
+                                  key={model.id}
+                                  onClick={() => {
+                                    onModelSelect(model.id);
+                                    setIsModelMenuOpen(false);
+                                  }}
+                                  className="group flex flex-col p-2.5 rounded-xl hover:bg-zinc-800/50 cursor-pointer transition-colors"
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                      <span className={`font-semibold text-[13px] ${selectedModel === model.id ? 'text-white' : 'text-zinc-300 group-hover:text-white'}`}>
+                                        {model.name}
+                                      </span>
+                                      {model.isPremium && (
+                                        <div className="flex items-center gap-1 bg-blue-900/30 border border-blue-500/20 rounded text-blue-400 px-1 py-0.5">
+                                          <svg className="w-2.5 h-2.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L2 12L12 22L22 12L12 2Z"/></svg>
+                                        </div>
+                                      )}
+                                      {selectedModel === model.id && (
+                                        <svg className="w-3.5 h-3.5 text-blue-400 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                                      )}
+                                    </div>
+                                    <div className="flex items-center gap-2 text-zinc-600 opacity-0 group-hover:opacity-100 transition-opacity">
+                                      <svg className="w-3.5 h-3.5 hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" title="Info"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                    </div>
+                                  </div>
+                                  <p className="text-[11px] text-zinc-500 mt-0.5 truncate pr-4">{model.description}</p>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                   )}
                 </div>
               
                 <button 
@@ -435,24 +526,9 @@ export const ChatView: React.FC<ChatViewProps> = ({
                   className={`p-2 rounded-xl transition-all ${(!input.trim() && files.length === 0) || isGenerating ? 'text-zinc-600 cursor-not-allowed' : (isBranching ? 'text-blue-500 hover:text-blue-400' : 'text-zinc-200 hover:text-white')} hover:scale-[1.02] active:scale-[0.98]`}
                 >
                   {isGenerating ? (
-                    /* STOP BUTTON (Square) */
-                    <svg 
-                      className="w-5 h-5" 
-                      viewBox="0 0 24 24" 
-                      fill="currentColor"
-                    >
-                      {/* Rounded Square */}
-                      <rect x="6" y="6" width="12" height="12" rx="2" ry="2" />
-                    </svg>
+                    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2" ry="2" /></svg>
                   ) : (
-                    /* SEND BUTTON (Arrow) */
-                    <svg 
-                      className="w-5 h-5" 
-                      viewBox="0 0 24 24" 
-                      fill="currentColor"
-                    >
-                      <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
-                    </svg>
+                    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" /></svg>
                   )}
                 </button>
               </div>
@@ -462,5 +538,4 @@ export const ChatView: React.FC<ChatViewProps> = ({
       </div>
     </div>
   );
-
 };
