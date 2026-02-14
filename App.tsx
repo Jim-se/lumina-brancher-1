@@ -9,7 +9,7 @@ import { ProfileView } from './components/ProfileView';
 import { dbService } from './services/dbService';
 import { supabase } from './services/supabaseClient';
 import { generateResponseOpenAI } from './services/openaiService';
-import { generateResponse, generateTitle } from './services/openrouterService';
+import { generateResponse, generateTitle } from './services/openRouterService';
 interface Conversation {
   id: string;
   nodes: Record<string, ChatNode>;
