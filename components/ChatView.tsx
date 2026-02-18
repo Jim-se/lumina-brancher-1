@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useMemo, useState } from 'react';
+import React, { useRef, useEffect, useMemo, useState, useCallback } from 'react';
 import { ChatNode, Message } from '../types';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -6,8 +6,8 @@ import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
 interface ChatViewProps {
   history: ChatNode[]; 
-  onSendMessage: (text: string, files: File[]) => void;
-  onBranch: (nodeId: string) => void;
+  onSendMessage: (text: string, files: File[], branchMetadata?: BranchMetadata) => void;
+  branchLines?: BranchMetadata[]; // <--- ADD THIS  onBranch: (nodeId: string) => void;
   isGenerating: boolean;
   isBranching?: boolean;
   onCancelBranch?: () => void;
@@ -17,23 +17,462 @@ interface ChatViewProps {
   onModelSelect: (modelId: string) => void;
 }
 
-// UPDATE: OpenRouter Model IDs with Descriptions and Flags
+// ─────────────────────────────────────────────────────────────────────────────
+// Branch ghost label — follows cursor, no cursor change
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface GhostLabelProps {
+  x: number; 
+  y: number;
+}
+
+const BranchGhostLabel: React.FC<{ x: number; y: number }> = ({ x, y }) => (
+  <div
+    className="absolute pointer-events-none z-[70] flex items-center gap-1.5 select-none"
+    style={{ left: x + 10, top: y - 9 }}
+  >
+    <svg className="w-3.5 h-3.5 text-blue-400/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+    </svg>
+    <span className="text-[11px] font-semibold tracking-wide text-blue-400/60 uppercase whitespace-nowrap">
+      Create branch
+    </span>
+  </div>
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BranchComposer — spawns at click Y, aligned to message column right edge
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface BranchComposerProps {
+  anchorY: number;
+  onSend: (text: string, files: File[]) => void;
+  onClose: () => void;
+  selectedModel: string;
+  onModelSelect: (modelId: string) => void;
+}
+
+const BranchComposer: React.FC<BranchComposerProps & { composerRef: React.RefObject<HTMLDivElement> }> = ({ anchorY, onSend, onClose, selectedModel, onModelSelect, composerRef }) => {
+  const [text, setText] = useState('');
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [files, setFiles] = useState<File[]>([]);
+  const [isModelMenuOpen, setIsModelMenuOpen] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { inputRef.current?.focus(); }, []);
+
+  const handleSend = useCallback(() => {
+    if (text.trim() || files.length > 0) {
+      onSend(text.trim(), files);
+    }
+  }, [text, files, onSend]);
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      setFiles((prev) => [...prev, ...Array.from(e.target.files!)]);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const removeFile = (index: number) => {
+    setFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const currentModel = MODELS.find(m => m.id === selectedModel);
+
+  return (
+    <div
+      ref={composerRef}
+      className="branch-composer-ui absolute z-[60] bg-zinc-900 border border-zinc-700/80 rounded-xl shadow-2xl shadow-black/60 flex flex-col p-1.5 animate-in fade-in zoom-in-95 duration-150 transition-all"
+      style={{
+        top: anchorY - 24,
+        left: 'calc(50% + 384px + 12px)',
+        width: 300,
+      }}
+      onMouseDown={(e) => e.stopPropagation()}
+    >
+      <input type="file" multiple ref={fileInputRef} className="hidden" onChange={handleFileSelect} />
+
+      {/* File Previews */}
+      {files.length > 0 && (
+        <div className="flex gap-2 pb-2 px-1 overflow-x-auto custom-scrollbar">
+          {files.map((file, i) => (
+            <div key={i} className="flex items-center gap-1.5 bg-zinc-800 rounded-lg px-2 py-1 text-[10px] text-zinc-300 border border-zinc-700 shrink-0">
+              <span className="truncate max-w-[100px]">{file.name}</span>
+              <button type="button" onClick={() => removeFile(i)} className="hover:text-red-400 transition-colors">✕</button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Top Row: Input & Actions */}
+      <div className="flex items-center gap-1">
+        <button type="button" onClick={onClose} title="Cancel (Esc)" className="p-1 text-zinc-600 hover:text-zinc-300 transition-colors rounded shrink-0">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+        </button>
+
+        <input
+          ref={inputRef}
+          type="text"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') handleSend();
+            if (e.key === 'Escape') onClose();
+          }}
+          placeholder="Type a branch prompt…"
+          className="flex-1 bg-transparent border-none text-sm text-zinc-200 placeholder:text-zinc-600 focus:ring-0 outline-none px-1 min-w-0"
+        />
+
+        <button 
+          type="button" 
+          onClick={() => setIsExpanded(!isExpanded)}
+          title="Toggle Options" 
+          className={`p-1 transition-colors rounded shrink-0 ${isExpanded ? 'text-zinc-300 bg-zinc-800' : 'text-zinc-600 hover:text-zinc-400'}`}
+        >
+          <svg className={`w-3.5 h-3.5 transition-transform duration-200 ${isExpanded ? 'rotate-180' : 'rotate-0'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+
+        <button
+          type="button"
+          onClick={handleSend}
+          disabled={!text.trim() && files.length === 0}
+          className="bg-blue-600 hover:bg-blue-500 disabled:opacity-30 disabled:cursor-not-allowed text-white p-1.5 rounded-lg transition-all shrink-0"
+        >
+          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" /></svg>
+        </button>
+      </div>
+
+      {/* Expanded Bottom Row: File & Model Options */}
+      {isExpanded && (
+        <div className="flex items-center gap-2 pt-2 pb-0.5 px-1 mt-1 border-t border-zinc-700/50 animate-in slide-in-from-top-2 fade-in duration-200">
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            title="Attach files"
+            className="p-1.5 text-zinc-400 hover:text-blue-400 rounded-full transition-all hover:bg-zinc-800"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+            </svg>
+          </button>
+          
+          <div className="relative">
+            <button 
+              type="button" 
+              onClick={() => setIsModelMenuOpen(!isModelMenuOpen)}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium text-zinc-400 hover:text-white bg-zinc-800/40 hover:bg-zinc-800 transition-all group"
+            >
+              <span className="truncate max-w-[120px]">{currentModel?.name || 'Branch Model'}</span>
+              <svg className="w-3.5 h-3.5 text-zinc-500 group-hover:text-zinc-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l4-4 4 4m0 6l-4 4-4-4" /></svg>
+            </button>
+
+            {/* Mini Model Menu */}
+            {isModelMenuOpen && (
+              <div className="absolute top-[calc(100%+6px)] left-0 w-48 max-h-48 overflow-y-auto bg-zinc-900 border border-zinc-700 rounded-xl shadow-xl z-[70] p-1 custom-scrollbar">
+                {MODELS.map(model => (
+                  <button
+                    key={model.id}
+                    onClick={() => { onModelSelect(model.id); setIsModelMenuOpen(false); }}
+                    className={`w-full flex justify-between items-center text-left px-2 py-1.5 text-[11px] rounded-lg transition-colors ${selectedModel === model.id ? 'bg-zinc-800 text-white font-medium' : 'text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200'}`}
+                  >
+                    <span className="truncate">{model.name}</span>
+                    {selectedModel === model.id && <svg className="w-3 h-3 text-blue-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// useBranchInteraction hook
+// ─────────────────────────────────────────────────────────────────────────────
+
+// 1. ADD THIS INTERFACE
+export interface BranchMetadata {
+  messageId: string;
+  blockId: string;
+  blockIndex: number;
+  relativeYInBlock: number;
+  textSnippet: string;
+  msgRelativeY: number; // For rendering the blue line
+}
+
+// 2. UPDATE THIS INTERFACE
+interface ActiveBranch { 
+  y: number; 
+  nodeId: string; 
+  metadata: BranchMetadata; // <--- Now activeBranch knows about metadata
+}
+
+function useBranchInteraction(
+  containerRef: React.RefObject<HTMLDivElement>,
+  onBranch?: (nodeId: string) => void,
+  onSendMessage?: (text: string, files: File[], branchMetadata?: BranchMetadata) => void, // <--- Using standard onSendMessage
+  onCancelBranch?: () => void
+) {
+  const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null);
+  const [activeBranch, setActiveBranch] = useState<ActiveBranch | null>(null);
+  const composerRef = useRef<HTMLDivElement>(null);
+  const zoneRef = useRef<HTMLDivElement>(null);
+
+  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (activeBranch) return;
+    const containerRect = containerRef.current?.getBoundingClientRect();
+    if (!containerRect) return;
+    setCursor({
+      x: e.clientX - containerRect.left,
+      y: e.clientY - containerRect.top,
+    });
+  }, [activeBranch, containerRef]);
+
+  const handleMouseLeave = useCallback(() => {
+    if (!activeBranch) setCursor(null);
+  }, [activeBranch]);
+
+  const closeBranch = useCallback((isCancel = true) => {
+    setActiveBranch(null);
+    setCursor(null);
+    if (isCancel && onCancelBranch) {
+      onCancelBranch();
+    }
+  }, [onCancelBranch]);
+
+  const handleZoneClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (activeBranch) {
+      closeBranch(true);
+      return;
+    }
+    const containerRect = containerRef.current?.getBoundingClientRect();
+    if (!containerRect) return;
+    
+    const relY = e.clientY - containerRect.top;
+    const absoluteClickY = e.clientY;
+
+    // 1. Find closest message
+    const messageEls = document.querySelectorAll<HTMLElement>('[data-node-id]');
+    let closestMsgEl: HTMLElement | null = null;
+    let closestNodeId = 'unknown';
+    let minMsgDist = Infinity;
+
+    messageEls.forEach((el) => {
+      const rect = el.getBoundingClientRect();
+      let dist = 0;
+      if (absoluteClickY < rect.top) dist = rect.top - absoluteClickY;
+      else if (absoluteClickY > rect.bottom) dist = absoluteClickY - rect.bottom;
+
+      if (dist < minMsgDist) {
+        minMsgDist = dist;
+        closestNodeId = el.getAttribute('data-node-id') || 'unknown';
+        closestMsgEl = el;
+      }
+    });
+
+    // 2. Find closest block inside that message & do math
+    let messageId = closestMsgEl?.getAttribute('data-message-id') || 'unknown';
+    let blockId = 'unknown';
+    let blockIndex = -1; // <--- MOVED UP HERE!
+    let relativeYInBlock = 0;
+    let textSnippet = '';
+
+    if (closestMsgEl) {
+      const mdWrapper = closestMsgEl.querySelector('.md-content');
+      if (mdWrapper) {
+        const blocks = Array.from(mdWrapper.children) as HTMLElement[];
+        let closestBlock: HTMLElement | null = null;
+        let minBlockDist = Infinity;
+        // (Removed blockIndex from here)
+
+        blocks.forEach((block, idx) => {
+          const rect = block.getBoundingClientRect();
+          let dist = 0;
+          if (absoluteClickY < rect.top) dist = rect.top - absoluteClickY;
+          else if (absoluteClickY > rect.bottom) dist = absoluteClickY - rect.bottom;
+
+          if (dist < minBlockDist) {
+            minBlockDist = dist;
+            closestBlock = block;
+            blockIndex = idx;
+          }
+        });
+
+        if (closestBlock) {
+          blockId = `block-${blockIndex}-${closestBlock.tagName.toLowerCase()}`;
+          const rect = closestBlock.getBoundingClientRect();
+          
+          // ADD THIS LINE:
+          const msgRelativeY = absoluteClickY - closestMsgEl.getBoundingClientRect().top;
+
+          const yInside = Math.max(0, Math.min(absoluteClickY - rect.top, rect.height)); relativeYInBlock = rect.height > 0 ? yInside / rect.height : 0;
+
+          const textContent = closestBlock.innerText || closestBlock.textContent || '';
+          const words = textContent.trim().split(/\s+/).filter(Boolean);
+          
+          if (words.length > 0) {
+            const estimatedWordIndex = Math.min(words.length - 1, Math.floor(relativeYInBlock * words.length));
+            const start = Math.max(0, estimatedWordIndex - 3);
+            const end = Math.min(words.length, estimatedWordIndex + 4);
+            textSnippet = words.slice(start, end).join(' ');
+          }
+        }
+      }
+    }
+
+    // 3. Log it immediately on click!
+    console.log('Floating Composer Clicked Math:', {
+      messageId,
+      blockId,
+      relativeYInBlock: Number(relativeYInBlock.toFixed(4)),
+      textSnippet,
+      promptText: "" // Empty since the user hasn't typed anything yet
+    });
+
+    // 4. Proceed to open the composer
+    setActiveBranch({ 
+      y: relY, 
+      nodeId: closestNodeId,
+      // Create the metadata object (Now includes blockIndex!)
+      metadata: { 
+        messageId, 
+        blockId, 
+        blockIndex, // <--- ADD THIS
+        relativeYInBlock, 
+        textSnippet, 
+        msgRelativeY: absoluteClickY - (closestMsgEl?.getBoundingClientRect().top || 0) 
+      } 
+    });setCursor(null);
+
+    if (onBranch && closestNodeId !== 'unknown') {
+      onBranch(closestNodeId);
+    }
+  }, [activeBranch, containerRef, closeBranch, onBranch]);
+
+  useEffect(() => {
+    if (!activeBranch) return;
+    const handler = (e: MouseEvent) => {
+      const target = e.target as Element;
+      if (target.closest('.branch-composer-ui')) return;
+      if (zoneRef.current?.contains(target)) return;
+      
+      closeBranch(true);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [activeBranch, closeBranch]);
+
+  // ── Submit Logic ──────────────────────────────────────────────────────────
+  const handleBranchSubmit = useCallback((text: string, files: File[]) => {  if (!activeBranch) return;
+    const containerRect = containerRef.current?.getBoundingClientRect();
+    if (!containerRect) return;
+
+    const absoluteClickY = containerRect.top + activeBranch.y;
+    const messageEls = document.querySelectorAll<HTMLElement>('[data-message-id]');
+    
+    let closestMsgEl: HTMLElement | null = null;
+    let minMsgDist = Infinity;
+
+    messageEls.forEach((el) => {
+      const rect = el.getBoundingClientRect();
+      let dist = 0;
+      if (absoluteClickY < rect.top) dist = rect.top - absoluteClickY;
+      else if (absoluteClickY > rect.bottom) dist = absoluteClickY - rect.bottom;
+
+      if (dist < minMsgDist) {
+        minMsgDist = dist;
+        closestMsgEl = el;
+      }
+    });
+
+    let messageId = 'unknown';
+    let blockId = 'unknown';
+    let relativeYInBlock = 0;
+    let textSnippet = '';
+
+    if (closestMsgEl) {
+      messageId = closestMsgEl.getAttribute('data-message-id') || 'unknown';
+
+      const mdWrapper = closestMsgEl.querySelector('.md-content');
+      if (mdWrapper) {
+        const blocks = Array.from(mdWrapper.children) as HTMLElement[];
+        let closestBlock: HTMLElement | null = null;
+        let minBlockDist = Infinity;
+        let blockIndex = -1;
+
+        blocks.forEach((block, idx) => {
+          const rect = block.getBoundingClientRect();
+          let dist = 0;
+          if (absoluteClickY < rect.top) dist = rect.top - absoluteClickY;
+          else if (absoluteClickY > rect.bottom) dist = absoluteClickY - rect.bottom;
+
+          if (dist < minBlockDist) {
+            minBlockDist = dist;
+            closestBlock = block;
+            blockIndex = idx;
+          }
+        });
+
+        if (closestBlock) {
+          blockId = `block-${blockIndex}-${closestBlock.tagName.toLowerCase()}`;
+          const rect = closestBlock.getBoundingClientRect();
+
+          const yInside = Math.max(0, Math.min(absoluteClickY - rect.top, rect.height));
+          relativeYInBlock = rect.height > 0 ? yInside / rect.height : 0;
+
+          const textContent = closestBlock.innerText || closestBlock.textContent || '';
+          const words = textContent.trim().split(/\s+/).filter(Boolean);
+          
+          if (words.length > 0) {
+            const estimatedWordIndex = Math.min(words.length - 1, Math.floor(relativeYInBlock * words.length));
+            const start = Math.max(0, estimatedWordIndex - 3);
+            const end = Math.min(words.length, estimatedWordIndex + 4);
+            textSnippet = words.slice(start, end).join(' ');
+          }
+        }
+      }
+    }
+
+    // 1. Log the requested data
+    console.log('Floating Composer Submit Math:', {
+      messageId,
+      blockId,
+      relativeYInBlock: Number(relativeYInBlock.toFixed(4)),
+      textSnippet,
+      promptText: text
+    });
+    
+    // 2. Call the EXACT same submit function as the main bottom input!
+    if (onSendMessage) {
+      onSendMessage(text, files, activeBranch.metadata); 
+    }
+
+    // 3. Close the floating composer normally (don't trigger onCancelBranch)
+    closeBranch(false);
+  }, [activeBranch, containerRef, closeBranch, onSendMessage]);
+
+  return { cursor, activeBranch, composerRef, zoneRef, handleMouseMove, handleMouseLeave, handleZoneClick, handleBranchSubmit, closeBranch };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 const MODELS = [
-  // Google
   { id: 'google/gemini-2.0-flash-lite-preview-02-05:free', name: 'Gemini 2.0 Flash Lite', provider: 'google', description: 'Lightning-fast with surprising capability', isPremium: false },
   { id: 'google/gemini-2.0-pro-exp-02-05:free', name: 'Gemini 2.0 Pro Exp', provider: 'google', description: 'Google\'s newest flagship with advanced reasoning', isPremium: true },
   { id: 'google/gemini-pro-1.5', name: 'Gemini 1.5 Pro', provider: 'google', description: 'High fidelity generation built on Gemini', isPremium: true },
-  // Arcee
   { id: 'arcee-ai/trinity-large-preview:free', name: 'Trinity Large (Free)', provider: 'arcee', description: 'Advanced preview model from Arcee AI', isPremium: false },
-  // OpenAI
   { id: 'openai/gpt-4o', name: 'GPT-4o', provider: 'openai', description: 'OpenAI\'s latest with breakthrough speed and intelligence', isPremium: true },
   { id: 'openai/gpt-4o-mini', name: 'GPT-4o Mini', provider: 'openai', description: 'Fast, affordable model for everyday tasks', isPremium: false },
   { id: 'openai/o1-preview', name: 'GPT-o1 Preview', provider: 'openai', description: 'Advanced reasoning and problem-solving capabilities', isPremium: true },
-  // Anthropic
   { id: 'anthropic/claude-3.5-sonnet', name: 'Claude Sonnet 3.5', provider: 'anthropic', description: 'Anthropic\'s most advanced Sonnet yet', isPremium: true },
 ];
 
-// Helper to render smaller provider icons in the popover sidebar
 const ProviderIcon = ({ provider, isActive }: { provider: string, isActive: boolean }) => {
   const className = `w-5 h-5 transition-colors ${isActive ? 'text-white' : 'text-zinc-500 group-hover:text-zinc-300'}`;
   switch (provider) {
@@ -52,10 +491,71 @@ const ProviderIcon = ({ provider, isActive }: { provider: string, isActive: bool
   }
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Responsive Branch Line Indicator
+// ─────────────────────────────────────────────────────────────────────────────
+const BranchLineIndicator: React.FC<{ line: BranchMetadata, uniqueMsgId: string, isGenerating?: boolean, title?: string }> = ({ line, uniqueMsgId, isGenerating, title }) => {  // Start with the initial click position so it renders instantly
+  const [top, setTop] = useState(line.msgRelativeY);
+
+  useEffect(() => {
+    const updatePosition = () => {
+      // 1. Find the message bubble
+      const msgEl = document.querySelector(`[data-message-id="${uniqueMsgId}"]`);
+      if (!msgEl) return;
+      
+      // 2. Find the specific paragraph/block inside it
+      const mdWrapper = msgEl.querySelector('.md-content');
+      if (!mdWrapper || !mdWrapper.children[line.blockIndex]) return;
+      const blockEl = mdWrapper.children[line.blockIndex] as HTMLElement;
+
+      // 3. Recalculate the Y position dynamically
+      const msgRect = msgEl.getBoundingClientRect();
+      const blockRect = blockEl.getBoundingClientRect();
+
+      // Formula: (Distance from top of message to top of paragraph) + (Percentage * current paragraph height)
+      const newTop = (blockRect.top - msgRect.top) + (blockRect.height * line.relativeYInBlock);
+      setTop(newTop);
+    };
+
+    // Run once on mount to ensure perfection
+    updatePosition();
+
+    // Re-run anytime the screen resizes!
+    window.addEventListener('resize', updatePosition);
+    return () => window.removeEventListener('resize', updatePosition);
+  }, [line, uniqueMsgId]);
+
+  return (
+    <div 
+      // Changed position to start right after the bubble (left-full) and added glow classes
+      className="absolute left-full ml-3 w-[300px] h-[2px] bg-blue-400 z-0 pointer-events-none transition-all duration-300 ease-out shadow-[0_0_12px_2px_rgba(59,130,246,0.8)]"
+      style={{ top: `${top}px` }}
+    >
+      {/* Added a small glowing anchor dot at the start of the line for a polished connection */}
+      <div className="absolute left-0 top-[-2px] w-1.5 h-1.5 bg-blue-100 rounded-full shadow-[0_0_8px_2px_rgba(255,255,255,0.8)]" />
+
+      <div className="absolute right-0 top-[-8px] flex items-center gap-1.5 text-[10px] font-bold text-blue-300 bg-black/90 px-2 py-0.5 rounded uppercase tracking-widest border border-blue-500/40 shadow-[0_0_10px_rgba(59,130,246,0.4)]">
+        {isGenerating ? (
+          <>
+            <svg className="w-3 h-3 animate-spin text-blue-400" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+            </svg>
+            <span>Branch processing...</span>
+          </>
+        ) : (
+          <span className="truncate max-w-[150px]">{title || 'New Branch'}</span>
+        )}
+      </div>
+    </div>
+  );
+};
+
 export const ChatView: React.FC<ChatViewProps> = ({ 
   history, 
   onSendMessage, 
-  onBranch, 
+  branchLines = [], // <--- Default to empty array
+  onBranch,
   isGenerating,
   isBranching,
   onCancelBranch,
@@ -74,7 +574,22 @@ export const ChatView: React.FC<ChatViewProps> = ({
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
 
-  // --- COMPACT MODEL MENU STATE ---
+  const containerRef = useRef<HTMLDivElement>(null);
+  
+  // 1. ADD THIS: Track where the submit came from
+  const [loadingSource, setLoadingSource] = useState<'main' | 'branch'>('main');
+
+  // 2. ADD THIS: Wrap the branch submit so it flags the source as 'branch'
+  const handleBranchMessage = useCallback((text: string, files: File[], metadata?: BranchMetadata) => {
+    setLoadingSource('branch');
+    if (onSendMessage) onSendMessage(text, files, metadata);
+  }, [onSendMessage]);
+
+  const {
+    cursor, activeBranch, composerRef, zoneRef,
+    handleMouseMove, handleMouseLeave, handleZoneClick,
+    handleBranchSubmit, closeBranch,
+  } = useBranchInteraction(containerRef, onBranch, handleBranchMessage, onCancelBranch); // <--- Passed the wrapper here
   const [isModelMenuOpen, setIsModelMenuOpen] = useState(false);
   const [selectedProviderTab, setSelectedProviderTab] = useState('all');
   const [modelSearchQuery, setModelSearchQuery] = useState('');
@@ -91,7 +606,6 @@ export const ChatView: React.FC<ChatViewProps> = ({
     });
   }, [selectedProviderTab, modelSearchQuery]);
 
-  // Handle closing menu when clicking outside or pressing Escape
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (modelMenuRef.current && !modelMenuRef.current.contains(event.target as Node)) {
@@ -111,7 +625,6 @@ export const ChatView: React.FC<ChatViewProps> = ({
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, [isModelMenuOpen]);
-  // --------------------------------
 
   useEffect(() => {
     if (scrollRef.current && !userHasScrolledUp) {
@@ -189,6 +702,9 @@ export const ChatView: React.FC<ChatViewProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() && files.length === 0 || isGenerating) return;
+    
+    setLoadingSource('main'); // <--- ADD THIS: Flag source as 'main'
+    
     onSendMessage(input, files);
     setInput('');
     setFiles([]);
@@ -210,9 +726,32 @@ export const ChatView: React.FC<ChatViewProps> = ({
   });
 
   return (
-    <div className="w-full h-full flex flex-col bg-transparent overflow-hidden pt-20 relative">
+    <div ref={containerRef} className="w-full h-full flex flex-col bg-transparent overflow-hidden pt-20 relative">
 
-      {/* CENTERED EMPTY STATE */}
+      {cursor && !activeBranch && (
+        <BranchGhostLabel x={cursor.x} y={cursor.y} />
+      )}
+
+      <div
+        className="absolute top-0 h-full z-40 cursor-default"
+        style={{ left: 'calc(50% + 384px)', right: 0 }}
+        ref={zoneRef}
+        onMouseMove={handleMouseMove}
+        onMouseLeave={handleMouseLeave}
+        onMouseDown={handleZoneClick}
+      />
+
+      {activeBranch && (
+        <BranchComposer
+          anchorY={activeBranch.y}
+          onSend={handleBranchSubmit}
+          onClose={() => closeBranch(true)}
+          composerRef={composerRef}
+          selectedModel={selectedModel}
+          onModelSelect={onModelSelect}
+        />
+      )}
+
       {allMessages.length === 0 && !isGenerating && (
         <div className="absolute inset-0 flex flex-col items-center justify-center text-zinc-700 gap-4 pointer-events-none z-0">
           <div className="w-16 h-16 bg-zinc-900 rounded-2xl flex items-center justify-center border border-zinc-800">
@@ -224,67 +763,105 @@ export const ChatView: React.FC<ChatViewProps> = ({
         </div>
       )}
 
-      {/* SCROLLABLE MESSAGE AREA */}
       <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto custom-scrollbar relative z-10">
         <div className="max-w-3xl mx-auto px-6 pt-8 pb-12 space-y-8">
           {allMessages.map(({ msg, nodeId }, idx) => {
             const uniqueMsgId = `${nodeId}-${idx}`; 
             
             return (
-              <div id={`msg-${idx}`} key={uniqueMsgId} className={`flex w-full ${msg.role === 'user' ? 'justify-end' : 'justify-start'} group animate-in fade-in slide-in-from-bottom-2 duration-500`}>
+              <div 
+                id={`msg-${idx}`} 
+                key={uniqueMsgId} 
+                data-node-id={nodeId} 
+                data-message-id={uniqueMsgId} 
+                className={`flex w-full ${msg.role === 'user' ? 'justify-end' : 'justify-start'} group animate-in fade-in slide-in-from-bottom-2 duration-500`}
+              >
                 <div className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'} max-w-full`}>
                   <div className={`max-w-full px-5 py-3 rounded-3xl relative transition-all duration-300 ${msg.role === 'user' ? 'bg-zinc-800/60 text-white rounded-tr-none border border-zinc-700/30' : 'bg-transparent text-zinc-200 rounded-tl-none border-none pl-0'}`}>                
-                    <ReactMarkdown components={{
-                      code: ({node, inline, className, children, ...props}: any) => {
-                        const match = /language-(\w+)/.exec(className || '');
-                        const codeContent = String(children).replace(/\n$/, '');
-                        
-                        if (inline) return <code className="bg-zinc-800 text-blue-400 px-2 py-1 rounded text-sm font-mono" {...props}>{children}</code>;
-                        
-                        return (
-                          <div className="relative group/code my-4 rounded-lg overflow-hidden border border-zinc-700/50">
-                            <div className="flex items-center justify-between px-4 py-2 bg-zinc-900 border-b border-zinc-800 text-xs text-zinc-400">
-                               <span className="font-mono">{match ? match[1] : 'code'}</span>
-                               <button 
-                                 onClick={() => navigator.clipboard.writeText(codeContent)}
-                                 className="flex items-center gap-1.5 hover:text-white transition-colors"
-                               >
-                                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
-                                 <span>Copy</span>
-                               </button>
-                            </div>
-                             {match ? (
-                                <SyntaxHighlighter 
-                                  style={vscDarkPlus} 
-                                  language={match[1]} 
-                                  PreTag="div" 
-                                  className="!my-0 !bg-[#0d0d0d] custom-scrollbar" 
-                                  customStyle={{ margin: 0, padding: '1.5rem', background: '#0d0d0d' }}
-                                  {...props}
+                    
+                    {/* DRAWS THE RESPONSIVE BLUE LINE */}
+                    {branchLines.filter(line => line.messageId === uniqueMsgId).map((line, i) => {
+                      // 1. Find the actual node we are currently looking at
+                      const activeNode = history.find(n => n.id === currentNodeId);
+                      // 2. Use the node's specific title if it exists, otherwise fallback to currentTitle
+                      const displayTitle = (activeNode as any)?.title || currentTitle;
+
+                      return (
+                        <BranchLineIndicator 
+                          key={i} 
+                          line={line} 
+                          uniqueMsgId={uniqueMsgId} 
+                          isGenerating={isGenerating} 
+                          title={displayTitle} 
+                        />
+                      );
+                    })}
+
+                    <div className="md-content relative z-10">
+                      <ReactMarkdown components={{
+                        code: ({node, inline, className, children, ...props}: any) => {
+                          const match = /language-(\w+)/.exec(className || '');
+                          const codeContent = String(children).replace(/\n$/, '');
+                          
+                          if (inline) return <code className="bg-zinc-800 text-blue-400 px-2 py-1 rounded text-sm font-mono" {...props}>{children}</code>;
+                          
+                          return (
+                            <div className="relative group/code my-4 rounded-lg overflow-hidden border border-zinc-700/50">
+                              <div className="flex items-center justify-between px-4 py-2 bg-zinc-900 border-b border-zinc-800 text-xs text-zinc-400">
+                                <span className="font-mono">{match ? match[1] : 'code'}</span>
+                                <button 
+                                  onClick={() => navigator.clipboard.writeText(codeContent)}
+                                  className="flex items-center gap-1.5 hover:text-white transition-colors"
                                 >
-                                  {codeContent}
-                                </SyntaxHighlighter>
-                            ) : (
-                               <div className="p-4 bg-[#0d0d0d] overflow-x-auto custom-scrollbar">
-                                  <code className="font-mono text-sm text-zinc-200" {...props}>{children}</code>
-                               </div>
-                            )}
-                          </div>
-                        );
-                      },
-                      h1: ({node, ...props}) => <h1 className="text-2xl font-bold mb-4 text-white" {...props} />,
-                      h2: ({node, ...props}) => <h2 className="text-xl font-bold mb-3 text-white" {...props} />,
-                      h3: ({node, ...props}) => <h3 className="text-lg font-bold mb-2 text-white" {...props} />,
-                      p: ({node, ...props}) => <p className={`leading-relaxed ${msg.role === 'user' ? 'mb-0' : 'mb-4 text-zinc-300'}`} {...props} />,                      
-                      ul: ({node, ...props}) => <ul className="list-disc list-inside mb-4 space-y-2 text-zinc-300" {...props} />,
-                      ol: ({node, ...props}) => <ol className="list-decimal list-inside mb-4 space-y-2 text-zinc-300" {...props} />,
-                      li: ({node, ...props}) => <li className="text-zinc-300" {...props} />,
-                      strong: ({node, ...props}) => <strong className="font-bold text-white" {...props} />,
-                      a: ({node, ...props}) => <a className="text-blue-400 hover:text-blue-300 underline" target="_blank" rel="noopener noreferrer" {...props} />,
-                      blockquote: ({node, ...props}) => <blockquote className="border-l-4 border-zinc-600 pl-4 italic text-zinc-400 my-4" {...props} />,  
-                    }}>
-                      {msg.content}
-                    </ReactMarkdown>
+                                <svg 
+                                  className="w-4 h-4" 
+                                  fill="none" 
+                                  stroke="currentColor" 
+                                  viewBox="0 0 24 24" 
+                                  xmlns="http://www.w3.org/2000/svg"
+                                >
+                                  <path 
+                                    strokeLinecap="round" 
+                                    strokeLinejoin="round" 
+                                    strokeWidth={2} 
+                                    d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10a2 2 0 00-2 2v8a2 2 0 002 2h8a2 2 0 002-2v-8a2 2 0 00-2-2z" 
+                                  />
+                                </svg>                                  <span>Copy</span>
+                                </button>
+                              </div>
+                                {match ? (
+                                  <SyntaxHighlighter 
+                                    style={vscDarkPlus} 
+                                    language={match[1]} 
+                                    PreTag="div" 
+                                    className="!my-0 !bg-[#0d0d0d] custom-scrollbar" 
+                                    customStyle={{ margin: 0, padding: '1.5rem', background: '#0d0d0d' }}
+                                    {...props}
+                                  >
+                                    {codeContent}
+                                  </SyntaxHighlighter>
+                              ) : (
+                                <div className="p-4 bg-[#0d0d0d] overflow-x-auto custom-scrollbar">
+                                    <code className="font-mono text-sm text-zinc-200" {...props}>{children}</code>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        },
+                        h1: ({node, ...props}) => <h1 className="text-2xl font-bold mb-4 text-white" {...props} />,
+                        h2: ({node, ...props}) => <h2 className="text-xl font-bold mb-3 text-white" {...props} />,
+                        h3: ({node, ...props}) => <h3 className="text-lg font-bold mb-2 text-white" {...props} />,
+                        p: ({node, ...props}) => <p className={`leading-relaxed ${msg.role === 'user' ? 'mb-0' : 'mb-4 text-zinc-300'}`} {...props} />,                      
+                        ul: ({node, ...props}) => <ul className="list-disc list-inside mb-4 space-y-2 text-zinc-300" {...props} />,
+                        ol: ({node, ...props}) => <ol className="list-decimal list-inside mb-4 space-y-2 text-zinc-300" {...props} />,
+                        li: ({node, ...props}) => <li className="text-zinc-300" {...props} />,
+                        strong: ({node, ...props}) => <strong className="font-bold text-white" {...props} />,
+                        a: ({node, ...props}) => <a className="text-blue-400 hover:text-blue-300 underline" target="_blank" rel="noopener noreferrer" {...props} />,
+                        blockquote: ({node, ...props}) => <blockquote className="border-l-4 border-zinc-600 pl-4 italic text-zinc-400 my-4" {...props} />,  
+                      }}>
+                        {msg.content}
+                      </ReactMarkdown>
+                    </div>
                   </div>
 
                   <div className={`mt-1.5 flex items-center gap-3 opacity-40 group-hover:opacity-100 focus-within:opacity-100 transition-all ${msg.role === 'user' ? 'text-zinc-500 pr-2' : 'text-zinc-500 pl-1'}`}>
@@ -301,8 +878,20 @@ export const ChatView: React.FC<ChatViewProps> = ({
                       {copiedMessageId === uniqueMsgId ? (
                         <svg className="w-3.5 h-3.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
                       ) : (
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
-                      )}
+                    <svg 
+                      className="w-4 h-4" 
+                      fill="none" 
+                      stroke="currentColor" 
+                      viewBox="0 0 24 24" 
+                      xmlns="http://www.w3.org/2000/svg"
+                    >
+                      <path 
+                        strokeLinecap="round" 
+                        strokeLinejoin="round" 
+                        strokeWidth={2} 
+                        d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10a2 2 0 00-2 2v8a2 2 0 002 2h8a2 2 0 002-2v-8a2 2 0 00-2-2z" 
+                      />
+                    </svg>                      )}
                     </button>
                   </div>
                 </div>
@@ -310,11 +899,11 @@ export const ChatView: React.FC<ChatViewProps> = ({
             );
           })}
 
-          {isGenerating && (
-            <div className="flex justify-start pl-8 py-2">
+          {/* ONLY show this spinner if the request came from the main input */}
+          {isGenerating && loadingSource === 'main' && (
+            <div className="flex justify-start pl-8 py-2 animate-in fade-in duration-300">
               <svg className="w-6 h-6 animate-spin text-blue-500" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
               </svg>
             </div>
           )}
@@ -362,7 +951,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
           )}
 
           <div className={`flex flex-col gap-0 bg-zinc-800/40 border rounded-[2rem] p-0.7 transition-all shadow-inner ${isBranching ? 'border-blue-500/50 rounded-t-2xl ring-2 ring-blue-500/10' : 'border-zinc-700/50 focus-within:border-zinc-500 focus-within:bg-zinc-800/60'}`}>
-           
+            
            {files.length > 0 && (
             <div className="w-full flex gap-2 px-4 pt-4 overflow-x-auto custom-scrollbar">
               {files.map((file, i) => (
@@ -379,7 +968,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
               ))}
             </div>
           )}
-           
+            
            <form onSubmit={handleSubmit} className="w-full flex flex-col gap-2 px-3 pb-3 pt-2 relative">
               
               <input 
@@ -425,7 +1014,6 @@ export const ChatView: React.FC<ChatViewProps> = ({
                         </svg>
                     </button>
 
-                   {/* MODAL TRIGGER BUTTON */}
                    <button 
                       type="button" 
                       onClick={() => setIsModelMenuOpen(!isModelMenuOpen)}
@@ -435,10 +1023,8 @@ export const ChatView: React.FC<ChatViewProps> = ({
                       <svg className={`w-3.5 h-3.5 transition-transform ${isModelMenuOpen ? 'rotate-180 text-white' : 'text-zinc-500 group-hover:text-zinc-300'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l4-4 4 4m0 6l-4 4-4-4" /></svg>
                    </button>
 
-                   {/* COMPACT POPOVER MENU */}
                    {isModelMenuOpen && (
-                      <div className="absolute bottom-[calc(100%+16px)] left-0 w-[420px] max-h-[400px] bg-zinc-900border border-zinc-800 rounded-2xl flex overflow-hidden shadow-2xl z-50 animate-in fade-in slide-in-from-bottom-2 duration-200">
-                        {/* Narrow Sidebar */}
+                      <div className="absolute bottom-[calc(100%+16px)] left-0 w-[420px] max-h-[400px] bg-zinc-900 border border-zinc-800 rounded-2xl flex overflow-hidden shadow-2xl z-50 animate-in fade-in slide-in-from-bottom-2 duration-200">
                         <div className="w-14 bg-zinc-950 border-r border-zinc-800/80 flex flex-col items-center py-3 gap-3">
                           {providers.map(p => (
                             <button 
@@ -454,9 +1040,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
                           ))}
                         </div>
 
-                        {/* Main Content */}
                         <div className="flex-1 flex flex-col bg-[#111111] min-w-0">
-                          {/* Compact Header & Search */}
                           <div className="p-3 border-b border-zinc-800/80 space-y-2.5">
                             <div className="flex items-center justify-between px-1">
                               <span className="text-[13px] font-semibold text-white">Models</span>
@@ -476,7 +1060,6 @@ export const ChatView: React.FC<ChatViewProps> = ({
                             </div>
                           </div>
 
-                          {/* Condensed Scrollable List */}
                           <div className="flex-1 overflow-y-auto p-2 space-y-0.5 custom-scrollbar">
                             {filteredModels.length === 0 ? (
                               <div className="flex flex-col items-center justify-center h-24 text-xs text-zinc-500">

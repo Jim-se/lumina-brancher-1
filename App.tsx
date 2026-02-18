@@ -2,7 +2,7 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { useNavigate, useLocation, Routes, Route } from 'react-router-dom';
 import { ChatState, ChatNode, Message } from './types';
-import { ChatView } from './components/ChatView';
+import { ChatView, BranchMetadata } from './components/ChatView';
 import { NodeView } from './components/NodeView';
 import { ProfileView } from './components/ProfileView';
 //import { generateResponse, generateTitle } from './services/geminiService';
@@ -37,6 +37,7 @@ const App: React.FC = () => {
   const [isSwitching, setIsSwitching] = useState(false);
   const [email, setEmail] = useState<string | null>(null);
   const [createdAt, setCreatedAt] = useState<string | null>(null);
+  const [branchLines, setBranchLines] = useState<any[]>([]);
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
 
   const toggleGroup = (groupName: string) => {
@@ -190,6 +191,7 @@ useEffect(() => {
       console.error(err);
     }
   };
+  
   const handleDeleteConversation = async (convId: string, e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent selecting the conversation when clicking delete
     
@@ -229,6 +231,7 @@ useEffect(() => {
     }
     setActiveConvId(id);
     setIsSwitching(true);
+    setBranchLines([]);
     // If id is null, we are starting a NEW thread. Reset workspace.
     if (!id) {
       setWorkspace({
@@ -260,10 +263,8 @@ useEffect(() => {
     }
   };
 
-  const handleSendMessage = async (text: string, files: File[]) => {
-    if (isGenerating || (!text.trim() && files.length === 0)) return;
-
-    console.log('🚀 [START] Message send initiated');
+  const handleSendMessage = async (text: string, files: File[], branchMetadata?: BranchMetadata) => {
+    if (isGenerating || (!text.trim() && files.length === 0)) return; console.log('🚀 [START] Message send initiated');
     const perfStart = performance.now();
     setIsGenerating(true);
 
@@ -326,11 +327,17 @@ useEffect(() => {
         return {
           ...prev,
           nodes: newNodes,
-          currentNodeId: targetNodeId,
+          // MAGIC: If branchMetadata exists, keep the OLD currentNodeId!
+          currentNodeId: branchMetadata ? prev.currentNodeId : targetNodeId,
           rootNodeId: !capturedParentId ? targetNodeId : prev.rootNodeId,
           branchingFromId: null
         };
       });
+
+      // MAGIC: Save the line coordinates so the UI can draw the blue line
+      if (branchMetadata) {
+        setBranchLines(prev => [...prev, branchMetadata]);
+      }
     } else {
       // Normal message appending
       setWorkspace(prev => {
@@ -483,13 +490,12 @@ useEffect(() => {
           root_node_id: targetNodeId,
           current_node_id: targetNodeId
         });
-      } else if (isBranching) {
+      } else if (isBranching && !branchMetadata) {
         await dbService.updateConversationState(currentConvId!, {
           current_node_id: targetNodeId
         });
       } else {
-        // Regular message — bump updated_at so conversation floats to top of sidebar
-        await dbService.updateConversationState(currentConvId!, {});
+        // Regular message — bump updated_at so conversation floats to top of sidebar  await dbService.updateConversationState(currentConvId!, {});
       }
 
       // 6. FINAL SYNC (Just to update sidebar/titles, NO NODE SWAPPING)
@@ -718,7 +724,7 @@ useEffect(() => {
                 </button>
                 
                 {activeConvId === conv.id && (
-                  <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-blue-500 rounded-r-full shadow-[0_0_10px_rgba(59,130,246,1)]" />
+                  <div className="" />
                 )}
               </div>
             ))}
@@ -854,8 +860,8 @@ useEffect(() => {
             <ChatView 
               history={getFullHistoryPath(workspace.currentNodeId)} 
               onSendMessage={handleSendMessage} 
-              onBranch={(id) => setWorkspace(p => ({ ...p, branchingFromId: id, viewMode: 'chat' }))}
-              isGenerating={isGenerating}
+              branchLines={branchLines}
+              onBranch={(id) => setWorkspace(p => ({ ...p, branchingFromId: id, viewMode: 'chat' }))}  isGenerating={isGenerating}
               isBranching={!!workspace.branchingFromId}
               onCancelBranch={() => setWorkspace(prev => ({ ...prev, branchingFromId: null }))}
               currentNodeId={workspace.currentNodeId}

@@ -121,7 +121,8 @@ export const NodeView: React.FC<NodeViewProps> = (props) => {
         id: node.id,
         type: 'chatNode',
         position: { x, y },
-        data: { ...node, onBranch: onBranchNode, scale },
+        // ADDED onSelect here so the card can trigger navigation
+        data: { ...node, onBranch: onBranchNode, onSelect: onSelectNode, scale },
         selected: node.id === currentNodeId,
       });
 
