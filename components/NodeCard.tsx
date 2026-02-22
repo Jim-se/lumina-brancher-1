@@ -63,7 +63,6 @@ export const NodeCard = memo(({ data, selected }: NodeProps<NodeCardData>) => {
 
   const displayTitle = stripMarkdown(rawTitle);
   const headings = extractHeadings(messages);
-  const LIMIT = 10;
 
   return (
     <div
@@ -124,7 +123,8 @@ export const NodeCard = memo(({ data, selected }: NodeProps<NodeCardData>) => {
       {/* Heading list */}
       {headings.length > 0 && (
         <div className="border-t border-zinc-00/50 pt-2 flex flex-col gap-1">
-          {headings.slice(0, LIMIT).map((h, i) => {
+          {/* Removed the .slice() limit so it maps all headings */}
+          {headings.map((h, i) => {
             const isTop = h.depth === 1;
             return (
               <div
@@ -140,17 +140,13 @@ export const NodeCard = memo(({ data, selected }: NodeProps<NodeCardData>) => {
                 ) : (
                   <span className={`shrink-0 mt-[3px] rounded-full ${isTop ? 'w-1 h-1 bg-zinc-500' : 'w-1.5 h-1.5 bg-zinc-200'}`} />
                 )}
-                <span className={`leading-snug line-clamp-1 ${isTop ? 'text-[12px] font-semibold text-zinc-400' : 'text-[13px] text-zinc-00'}`}>
+                <span className={`leading-snug ${isTop ? 'text-[12px] font-semibold text-zinc-400' : 'text-[13px] text-zinc-00'}`}>
                   {h.text}
                 </span>
               </div>
             );
           })}
-          {headings.length > LIMIT && (
-            <span className="text-[10px] text-zinc-500 pl-2.5 mt-0.5">
-              +{headings.length - LIMIT} more
-            </span>
-          )}
+          
         </div>
       )}
     </div>

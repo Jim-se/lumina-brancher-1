@@ -1,5 +1,6 @@
 import { supabase } from './supabaseClient';
 import { ChatNode, Message } from '../types';
+import { BranchMetadata } from '../components/ChatView';
 
 export const dbService = {
   async fetchConversations() {
@@ -11,7 +12,6 @@ export const dbService = {
     return data;
   },
 
-  // Add this inside your dbService object
   async fetchUserProfile(): Promise<{ fullName: string | null; email: string | undefined; createdAt: string | undefined } | null> {
     const { data: { user } } = await supabase.auth.getUser();
     
@@ -35,7 +35,10 @@ export const dbService = {
     };
   },
 
-  async fetchConversationDetail(conversationId: string) {
+  async fetchConversationDetail(conversationId: string): Promise<{
+    nodes: Record<string, ChatNode>;
+    branchLines: BranchMetadata[];
+  }> {
     // 1. Fetch nodes
     const { data: nodesData, error: nodesError } = await supabase
       .from('nodes')
@@ -53,7 +56,7 @@ export const dbService = {
 
     if (msgsError) throw msgsError;
 
-    // 3. Reconstruct the local graph
+    // 3. Reconstruct the local node graph
     const nodes: Record<string, ChatNode> = {};
     nodesData.forEach(n => {
       nodes[n.id] = {
@@ -78,26 +81,45 @@ export const dbService = {
       };
     });
 
-    return nodes;
+    // 4. Reconstruct branchLines from branch nodes that have positioning data saved
+    const branchLines: BranchMetadata[] = nodesData
+      .filter(n =>
+        n.is_branch &&
+        n.branch_message_id !== null &&
+        n.branch_block_index !== null &&
+        n.branch_relative_y_in_block !== null &&
+        n.branch_msg_relative_y !== null
+      )
+      .map(n => ({
+        messageId: n.branch_message_id as string,
+        // blockId is derived — not stored, reconstructed here for type completeness
+        blockId: `block-${n.branch_block_index}-restored`,
+        blockIndex: n.branch_block_index as number,
+        relativeYInBlock: n.branch_relative_y_in_block as number,
+        textSnippet: '',
+        msgRelativeY: n.branch_msg_relative_y as number,
+        targetNodeId: n.id,
+      }));
+
+    return { nodes, branchLines };
   },
 
- async initializeNewConversation(title: string, firstPrompt: string) {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Auth required');
+  async initializeNewConversation(title: string, firstPrompt: string) {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Auth required');
 
-  // Start an explicit transaction using Supabase RPC
-  const { data, error } = await supabase.rpc('create_conversation_with_root', {
-    p_title: title,
-    p_user_id: user.id,
-    p_hierarchical_id: '1'
-  });
+    const { data, error } = await supabase.rpc('create_conversation_with_root', {
+      p_title: title,
+      p_user_id: user.id,
+      p_hierarchical_id: '1'
+    });
 
-  if (error) throw error;
-  
-  return {
-    conv: { id: data.conversation_id, title, user_id: user.id },
-    rootNode: { id: data.node_id, hierarchical_id: '1' }
-  };
+    if (error) throw error;
+    
+    return {
+      conv: { id: data.conversation_id, title, user_id: user.id },
+      rootNode: { id: data.node_id, hierarchical_id: '1' }
+    };
   },
 
   async createConversation(title: string) {
@@ -123,7 +145,7 @@ export const dbService = {
   },
 
   async updateConversationState(id: string, updates: { root_node_id?: string, current_node_id?: string, title?: string }) {
-    const { data: { user } } = await supabase.auth.getUser(); // Add this
+    const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
     
     const { error } = await supabase
@@ -150,36 +172,45 @@ export const dbService = {
   },
 
   async createNode(payload: { 
-    id?: string, // <--- ADD THIS
-    conversations_id: string, 
-    parent_id: string | null, 
-    hierarchical_id: string, 
-    is_branch: boolean, 
-    title?: string,
+    id?: string;
+    conversations_id: string; 
+    parent_id: string | null; 
+    hierarchical_id: string; 
+    is_branch: boolean; 
+    title?: string;
+    // Branch line positioning — only set for branch nodes created via the mini composer
+    branch_message_id?: string;
+    branch_block_index?: number;
+    branch_relative_y_in_block?: number;
+    branch_msg_relative_y?: number;
   }) {
-
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
     const { data, error } = await supabase
       .from('nodes')
       .insert({
-        id: payload.id, // <--- ADD THIS
+        id: payload.id,
         conversations_id: payload.conversations_id,
         parent_id: payload.parent_id,
         hierarchical_id: payload.hierarchical_id,
         is_branch: payload.is_branch,
         title: payload.title || '...',
-        user_id: user.id
+        user_id: user.id,
+        // These will be null for regular nodes — Supabase ignores undefined fields
+        branch_message_id: payload.branch_message_id ?? null,
+        branch_block_index: payload.branch_block_index ?? null,
+        branch_relative_y_in_block: payload.branch_relative_y_in_block ?? null,
+        branch_msg_relative_y: payload.branch_msg_relative_y ?? null,
       })
-      .select() // This tells Supabase to send the new row back
+      .select()
       .single();
     if (error) throw error;
-      return data;
+    return data;
   },
 
   async updateNodeTitle(id: string, title: string) {
-    const { data: { user } } = await supabase.auth.getUser(); // Add this
+    const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
     const { error } = await supabase
@@ -191,20 +222,17 @@ export const dbService = {
   },
 
   async createMessage(payload: { 
-    nodes_id: string, 
-    role: string, 
-    content: string, 
-    ordinal: number 
+    nodes_id: string; 
+    role: string; 
+    content: string; 
+    ordinal: number;
   }) {
-
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
     const { data, error } = await supabase
       .from('messages')
-      .insert({
-        ...payload, 
-        user_id: user.id})
+      .insert({ ...payload, user_id: user.id })
       .select()
       .single();
     if (error) throw error;

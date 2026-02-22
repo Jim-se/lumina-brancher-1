@@ -7,8 +7,13 @@ import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 interface ChatViewProps {
   history: ChatNode[]; 
   onSendMessage: (text: string, files: File[], branchMetadata?: BranchMetadata) => void;
-  branchLines?: BranchMetadata[]; // <--- ADD THIS  onBranch: (nodeId: string) => void;
+  onSendMessageToNode?: (nodeId: string, text: string, files: File[]) => void;
+  onSelectNode?: (nodeId: string) => void;
+  branchLines?: BranchMetadata[];
+  onBranch: (nodeId: string) => void;
+  nodes?: Record<string, ChatNode>;
   isGenerating: boolean;
+  generatingNodeId?: string | null;
   isBranching?: boolean;
   onCancelBranch?: () => void;
   currentNodeId: string | null;
@@ -204,6 +209,7 @@ export interface BranchMetadata {
   relativeYInBlock: number;
   textSnippet: string;
   msgRelativeY: number; // For rendering the blue line
+  targetNodeId?: string; // The node created by this branch
 }
 
 // 2. UPDATE THIS INTERFACE
@@ -494,69 +500,226 @@ const ProviderIcon = ({ provider, isActive }: { provider: string, isActive: bool
 // ─────────────────────────────────────────────────────────────────────────────
 // Responsive Branch Line Indicator
 // ─────────────────────────────────────────────────────────────────────────────
-const BranchLineIndicator: React.FC<{ line: BranchMetadata, uniqueMsgId: string, isGenerating?: boolean, title?: string }> = ({ line, uniqueMsgId, isGenerating, title }) => {  // Start with the initial click position so it renders instantly
-  const [top, setTop] = useState(line.msgRelativeY);
+// ─────────────────────────────────────────────────────────────────────────────
+// BranchMiniChat — rendered as a top-level overlay above the branch zone
+// Position is computed from the message element's screen coords each frame
+// ─────────────────────────────────────────────────────────────────────────────
+interface BranchMiniChatProps {
+  line: BranchMetadata;
+  uniqueMsgId: string;
+  branchNode?: ChatNode;
+  isGeneratingThisNode?: boolean;
+  title?: string;
+  onSendMessage?: (text: string, files: File[]) => void;
+  onGoToNode?: () => void;
+  containerRef: React.RefObject<HTMLDivElement>;
+}
+
+const MiniMarkdown: React.FC<{ content: string }> = ({ content }) => (
+  <ReactMarkdown
+    components={{
+      p: ({ node, ...props }) => <p className="mb-1.5 last:mb-0 leading-relaxed text-zinc-300" {...props} />,
+      code: ({ node, inline, className, children, ...props }: any) => {
+        if (inline) return <code className="bg-zinc-800 text-blue-400 px-1 py-0.5 rounded text-[10px] font-mono" {...props}>{children}</code>;
+        return <pre className="bg-zinc-900 border border-zinc-700/50 rounded-lg p-2 my-1.5 overflow-x-auto custom-scrollbar"><code className="text-[10px] font-mono text-zinc-300" {...props}>{children}</code></pre>;
+      },
+      strong: ({ node, ...props }) => <strong className="font-bold text-white" {...props} />,
+      em: ({ node, ...props }) => <em className="italic text-zinc-400" {...props} />,
+      ul: ({ node, ...props }) => <ul className="list-disc list-inside mb-1.5 space-y-0.5 text-zinc-300" {...props} />,
+      ol: ({ node, ...props }) => <ol className="list-decimal list-inside mb-1.5 space-y-0.5 text-zinc-300" {...props} />,
+      li: ({ node, ...props }) => <li className="text-zinc-300" {...props} />,
+      h1: ({ node, ...props }) => <h1 className="text-sm font-bold text-white mb-1" {...props} />,
+      h2: ({ node, ...props }) => <h2 className="text-xs font-bold text-white mb-1" {...props} />,
+      h3: ({ node, ...props }) => <h3 className="text-xs font-semibold text-zinc-200 mb-1" {...props} />,
+      blockquote: ({ node, ...props }) => <blockquote className="border-l-2 border-zinc-600 pl-2 italic text-zinc-400 my-1" {...props} />,
+      a: ({ node, ...props }) => <a className="text-blue-400 hover:text-blue-300 underline" target="_blank" rel="noopener noreferrer" {...props} />,
+    }}
+  >
+    {content}
+  </ReactMarkdown>
+);
+
+const BranchMiniChat: React.FC<BranchMiniChatProps> = ({
+  line, uniqueMsgId, branchNode, isGeneratingThisNode, title, onSendMessage, onGoToNode, containerRef
+}) => {
+  // Position in pixels relative to the container element
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const [input, setInput] = useState('');
+  const [collapsed, setCollapsed] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messages = branchNode?.messages ?? [];
+  const LINE_WIDTH = 48;
 
   useEffect(() => {
     const updatePosition = () => {
-      // 1. Find the message bubble
-      const msgEl = document.querySelector(`[data-message-id="${uniqueMsgId}"]`);
-      if (!msgEl) return;
-      
-      // 2. Find the specific paragraph/block inside it
+      const container = containerRef.current;
+      const msgEl = document.querySelector<HTMLElement>(`[data-message-id="${uniqueMsgId}"]`);
+      if (!container || !msgEl) return;
+
       const mdWrapper = msgEl.querySelector('.md-content');
-      if (!mdWrapper || !mdWrapper.children[line.blockIndex]) return;
-      const blockEl = mdWrapper.children[line.blockIndex] as HTMLElement;
-
-      // 3. Recalculate the Y position dynamically
+      const containerRect = container.getBoundingClientRect();
       const msgRect = msgEl.getBoundingClientRect();
-      const blockRect = blockEl.getBoundingClientRect();
 
-      // Formula: (Distance from top of message to top of paragraph) + (Percentage * current paragraph height)
-      const newTop = (blockRect.top - msgRect.top) + (blockRect.height * line.relativeYInBlock);
-      setTop(newTop);
-    };
+      let lineTop: number;
+      if (mdWrapper && mdWrapper.children[line.blockIndex]) {
+        const blockEl = mdWrapper.children[line.blockIndex] as HTMLElement;
+        const blockRect = blockEl.getBoundingClientRect();
+        lineTop = (blockRect.top - containerRect.top) + (blockRect.height * line.relativeYInBlock);
+      } else {
+        lineTop = (msgRect.top - containerRect.top) + line.msgRelativeY;
+      }
 
-    // Run once on mount to ensure perfection
+      // Left edge: right side of the message bubble + gap
+      // The message bubble ends near calc(50% + 384px) of the container
+      const msgBubbleRight = msgRect.right - containerRect.left;
+      setPos({ top: lineTop, left: msgBubbleRight + LINE_WIDTH });    };
+
     updatePosition();
-
-    // Re-run anytime the screen resizes!
     window.addEventListener('resize', updatePosition);
-    return () => window.removeEventListener('resize', updatePosition);
-  }, [line, uniqueMsgId]);
+    // Also update on scroll since the message moves vertically
+    const scrollEl = containerRef.current?.querySelector('.overflow-y-auto');
+    scrollEl?.addEventListener('scroll', updatePosition);
+    return () => {
+      window.removeEventListener('resize', updatePosition);
+      scrollEl?.removeEventListener('scroll', updatePosition);
+    };
+  }, [line, uniqueMsgId, containerRef]);
+
+  useEffect(() => {
+    if (!collapsed) messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages.length, collapsed]);
+
+  const handleSend = () => {
+    if (!input.trim() || !onSendMessage) return;
+    onSendMessage(input.trim(), []);
+    setInput('');
+  };
+
+  const displayTitle = branchNode?.title && branchNode.title !== '...' ? branchNode.title : (title || 'Branch');
+  if (!pos) return null;
+
+  const panelTop = collapsed ? pos.top - 18 : pos.top - 120;
 
   return (
-    <div 
-      // Changed position to start right after the bubble (left-full) and added glow classes
-      className="absolute left-full ml-3 w-[300px] h-[2px] bg-blue-400 z-0 pointer-events-none transition-all duration-300 ease-out shadow-[0_0_12px_2px_rgba(59,130,246,0.8)]"
-      style={{ top: `${top}px` }}
+    // z-[60] — sits above the branch zone (z-40) and BranchComposer (z-60 too, but this is fine)
+    <div
+      className="absolute z-[60] pointer-events-none"
+      style={{ top: pos.top, left: pos.left }}
     >
-      {/* Added a small glowing anchor dot at the start of the line for a polished connection */}
-      <div className="absolute left-0 top-[-2px] w-1.5 h-1.5 bg-blue-100 rounded-full shadow-[0_0_8px_2px_rgba(255,255,255,0.8)]" />
+      {/* Blue connecting line — from left edge back to the message bubble */}
+      <div
+        className="pointer-events-none absolute top-[1px] h-[2px] bg-blue-400 shadow-[0_0_10px_2px_rgba(59,130,246,0.7)]"
+        style={{ width: LINE_WIDTH, left: -LINE_WIDTH }}
+      >
+        <div className="absolute left-0 top-[-2px] w-1.5 h-1.5 bg-blue-100 rounded-full shadow-[0_0_8px_2px_rgba(255,255,255,0.8)]" />
+        <div className="absolute right-0 top-[-2px] w-1.5 h-1.5 bg-blue-400 rounded-full" />
+      </div>
 
-      <div className="absolute right-0 top-[-8px] flex items-center gap-1.5 text-[10px] font-bold text-blue-300 bg-black/90 px-2 py-0.5 rounded uppercase tracking-widest border border-blue-500/40 shadow-[0_0_10px_rgba(59,130,246,0.4)]">
-        {isGenerating ? (
-          <>
-            <svg className="w-3 h-3 animate-spin text-blue-400" fill="none" viewBox="0 0 24 24">
+      {/* Mini chat panel — pointer-events-auto so it captures mouse fully */}
+      <div
+        className="pointer-events-auto absolute flex flex-col bg-zinc-950 border border-blue-500/30 rounded-2xl shadow-2xl shadow-black/80 overflow-hidden transition-all duration-200"
+        style={{
+          top: panelTop - pos.top,
+          left: 0,
+          width: 280,
+          height: collapsed ? 36 : 260,
+        }}
+        onWheel={e => e.stopPropagation()} // keep scroll inside the mini chat
+      >
+        {/* Header */}
+        <div className="flex items-center gap-2 px-2.5 py-1.5 border-b border-zinc-800/80 bg-zinc-900/80 shrink-0">
+          <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-pulse shrink-0" />
+          <span className="text-[10px] font-black uppercase tracking-widest text-blue-300 truncate flex-1 min-w-0">
+            {displayTitle}
+          </span>
+          {isGeneratingThisNode && (
+            <svg className="w-3 h-3 animate-spin text-blue-400 shrink-0" fill="none" viewBox="0 0 24 24">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
             </svg>
-            <span>Branch processing...</span>
+          )}
+          {onGoToNode && (
+            <button type="button" onClick={onGoToNode} title="Go to branch"
+              className="p-0.5 text-zinc-600 hover:text-blue-400 transition-colors shrink-0">
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+              </svg>
+            </button>
+          )}
+          <button type="button" onClick={() => setCollapsed(c => !c)} title={collapsed ? 'Expand' : 'Collapse'}
+            className="p-0.5 text-zinc-600 hover:text-zinc-300 transition-colors shrink-0">
+            <svg className={`w-3 h-3 transition-transform duration-200 ${collapsed ? 'rotate-180' : ''}`}
+              fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+        </div>
+
+        {!collapsed && (
+          <>
+            <div className="flex-1 overflow-y-auto px-3 py-2 space-y-2 custom-scrollbar text-[11px]">
+              {messages.length === 0 && !isGeneratingThisNode && (
+                <div className="flex items-center justify-center h-full text-zinc-600 text-center">No messages yet</div>
+              )}
+              {messages.map((msg, i) => (
+                <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`max-w-[92%] px-2.5 py-1.5 rounded-xl leading-relaxed ${
+                    msg.role === 'user' ? 'bg-zinc-700/70 text-white rounded-tr-none text-[11px]' : 'bg-transparent pl-0'
+                  }`}>
+                    {msg.role === 'user' ? msg.content : (
+                      msg.content
+                        ? <MiniMarkdown content={msg.content} />
+                        : isGeneratingThisNode && i === messages.length - 1
+                          ? <span className="text-zinc-500 italic">Thinking…</span>
+                          : null
+                    )}
+                  </div>
+                </div>
+              ))}
+              {isGeneratingThisNode && messages.length === 0 && (
+                <div className="text-zinc-500 italic px-1">Thinking…</div>
+              )}
+              <div ref={messagesEndRef} />
+            </div>
+            <div className="shrink-0 border-t border-zinc-800/80 px-2 py-1.5 flex items-center gap-1.5 bg-zinc-900/60">
+              <input
+                type="text"
+                value={input}
+                onChange={e => setInput(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); handleSend(); }
+                }}
+                placeholder="Continue branch…"
+                disabled={isGeneratingThisNode}
+                className="flex-1 bg-transparent text-[11px] text-zinc-200 placeholder:text-zinc-600 outline-none border-none min-w-0 disabled:opacity-50"
+              />
+              <button type="button" onClick={handleSend}
+                disabled={!input.trim() || isGeneratingThisNode}
+                className="p-1 text-blue-400 hover:text-blue-300 disabled:opacity-30 disabled:cursor-not-allowed transition-colors shrink-0">
+                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
+                </svg>
+              </button>
+            </div>
           </>
-        ) : (
-          <span className="truncate max-w-[150px]">{title || 'New Branch'}</span>
         )}
       </div>
     </div>
   );
 };
 
+
+
 export const ChatView: React.FC<ChatViewProps> = ({ 
   history, 
   onSendMessage, 
-  branchLines = [], // <--- Default to empty array
+  onSendMessageToNode,
+  onSelectNode,
+  branchLines = [],
   onBranch,
+  nodes = {},
   isGenerating,
+  generatingNodeId,
   isBranching,
   onCancelBranch,
   currentNodeId,
@@ -576,7 +739,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
 
   const containerRef = useRef<HTMLDivElement>(null);
   
-  // 1. ADD THIS: Track where the submit came from
+  // Track where the submit came from — only scroll to bottom for 'main'
   const [loadingSource, setLoadingSource] = useState<'main' | 'branch'>('main');
 
   // 2. ADD THIS: Wrap the branch submit so it flags the source as 'branch'
@@ -626,21 +789,23 @@ export const ChatView: React.FC<ChatViewProps> = ({
     };
   }, [isModelMenuOpen]);
 
+  // Only scroll to bottom when new messages arrive in the MAIN chat node
   useEffect(() => {
-    if (scrollRef.current && !userHasScrolledUp) {
+    if (loadingSource === 'main' && scrollRef.current && !userHasScrolledUp) {
       if (isAtBottomRef.current) {
         scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
       }
     }
-  }, [history, userHasScrolledUp]);
+  }, [history, loadingSource, userHasScrolledUp]);
 
+  // Scroll to bottom while streaming — only for the main node
   useEffect(() => {
-    if (isGenerating && scrollRef.current) {
+    if (isGenerating && generatingNodeId === currentNodeId && scrollRef.current) {
       isAtBottomRef.current = true;
       setUserHasScrolledUp(false);
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [isGenerating]);
+  }, [isGenerating, generatingNodeId, currentNodeId]);
 
   const handleCopyMessage = (content: string, msgId: string) => {
     navigator.clipboard.writeText(content);
@@ -739,7 +904,39 @@ export const ChatView: React.FC<ChatViewProps> = ({
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
         onMouseDown={handleZoneClick}
+        onWheel={e => {
+          if (scrollRef.current) scrollRef.current.scrollTop += e.deltaY;
+        }}
       />
+
+      {/* Mini chat overlays — rendered above the branch zone (z-[60]) so they capture events first */}
+      {branchLines.map((line, i) => {
+        const branchNode = line.targetNodeId ? nodes[line.targetNodeId] : undefined;
+        const isGeneratingThisNode = isGenerating && generatingNodeId === line.targetNodeId;
+        const activeNode = history.find(n => n.id === currentNodeId);
+        const displayTitle = (activeNode as any)?.title || currentTitle;
+        return (
+          <BranchMiniChat
+            key={line.targetNodeId ?? i}
+            line={line}
+            uniqueMsgId={line.messageId}
+            branchNode={branchNode}
+            isGeneratingThisNode={isGeneratingThisNode}
+            title={displayTitle}
+            containerRef={containerRef}
+            onSendMessage={
+              line.targetNodeId && onSendMessageToNode
+                ? (text, files) => onSendMessageToNode!(line.targetNodeId!, text, files)
+                : undefined
+            }
+            onGoToNode={
+              line.targetNodeId && onSelectNode
+                ? () => onSelectNode!(line.targetNodeId!)
+                : undefined
+            }
+          />
+        );
+      })}
 
       {activeBranch && (
         <BranchComposer
@@ -779,24 +976,6 @@ export const ChatView: React.FC<ChatViewProps> = ({
                 <div className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'} max-w-full`}>
                   <div className={`max-w-full px-5 py-3 rounded-3xl relative transition-all duration-300 ${msg.role === 'user' ? 'bg-zinc-800/60 text-white rounded-tr-none border border-zinc-700/30' : 'bg-transparent text-zinc-200 rounded-tl-none border-none pl-0'}`}>                
                     
-                    {/* DRAWS THE RESPONSIVE BLUE LINE */}
-                    {branchLines.filter(line => line.messageId === uniqueMsgId).map((line, i) => {
-                      // 1. Find the actual node we are currently looking at
-                      const activeNode = history.find(n => n.id === currentNodeId);
-                      // 2. Use the node's specific title if it exists, otherwise fallback to currentTitle
-                      const displayTitle = (activeNode as any)?.title || currentTitle;
-
-                      return (
-                        <BranchLineIndicator 
-                          key={i} 
-                          line={line} 
-                          uniqueMsgId={uniqueMsgId} 
-                          isGenerating={isGenerating} 
-                          title={displayTitle} 
-                        />
-                      );
-                    })}
-
                     <div className="md-content relative z-10">
                       <ReactMarkdown components={{
                         code: ({node, inline, className, children, ...props}: any) => {

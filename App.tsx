@@ -57,6 +57,7 @@ const App: React.FC = () => {
   });
 
   const [isGenerating, setIsGenerating] = useState(false);
+  const [generatingNodeId, setGeneratingNodeId] = useState<string | null>(null);
   const [selectedModel, setSelectedModel] = useState("gemini-3-flash-preview");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const groupedConversations = useMemo(() => {
@@ -246,7 +247,7 @@ useEffect(() => {
     }
 
     try {
-      const nodesMap = await dbService.fetchConversationDetail(id);
+      const { nodes: nodesMap, branchLines: loadedBranchLines } = await dbService.fetchConversationDetail(id);
       const header = conversations.find(c => c.id === id);
 
       setWorkspace({
@@ -256,6 +257,7 @@ useEffect(() => {
         viewMode: 'chat',
         branchingFromId: null,
       });
+      setBranchLines(loadedBranchLines);
     } catch (err) {
       console.error("Hydration failed:", err);
     } finally {
@@ -267,7 +269,6 @@ useEffect(() => {
     if (isGenerating || (!text.trim() && files.length === 0)) return; console.log('🚀 [START] Message send initiated');
     const perfStart = performance.now();
     setIsGenerating(true);
-
     let currentConvId = activeConvId;
     const isNewConversation = !currentConvId;
     const isBranching = !!workspace.branchingFromId;
@@ -285,6 +286,7 @@ useEffect(() => {
 
     const capturedParentId = isBranching ? workspace.branchingFromId : null;
     const capturedHLabel = generateHierarchicalLabel(capturedParentId, workspace.nodes);
+    setGeneratingNodeId(targetNodeId);
 
     const currentMessages = (workspace.currentNodeId && workspace.nodes[workspace.currentNodeId])
       ? workspace.nodes[workspace.currentNodeId].messages
@@ -336,7 +338,7 @@ useEffect(() => {
 
       // MAGIC: Save the line coordinates so the UI can draw the blue line
       if (branchMetadata) {
-        setBranchLines(prev => [...prev, branchMetadata]);
+        setBranchLines(prev => [...prev, { ...branchMetadata, targetNodeId }]);
       }
     } else {
       // Normal message appending
@@ -443,6 +445,7 @@ useEffect(() => {
       }
 
       setIsGenerating(false);
+      setGeneratingNodeId(null);
 
       // ... (Continue to 5. DATABASE SYNC as before) ...
 
@@ -459,12 +462,19 @@ useEffect(() => {
       if (isNewConversation || isBranching) {
         // SAVE NODE WITH OUR PRE-GENERATED ID
         await dbService.createNode({
-          id: targetNodeId, // <--- PASSING THE ID WE GENERATED
+          id: targetNodeId,
           conversations_id: currentConvId!,
           parent_id: capturedParentId,
           hierarchical_id: capturedHLabel,
           is_branch: isBranching,
-          title: '...'
+          title: '...',
+          // Save branch line positioning so it can be restored on next load
+          ...(branchMetadata ? {
+            branch_message_id: branchMetadata.messageId,
+            branch_block_index: branchMetadata.blockIndex,
+            branch_relative_y_in_block: branchMetadata.relativeYInBlock,
+            branch_msg_relative_y: branchMetadata.msgRelativeY,
+          } : {})
         });
       }
 
@@ -550,11 +560,94 @@ useEffect(() => {
     } catch (err) {
       console.error("Message Failure:", err);
       setIsGenerating(false);
+      setGeneratingNodeId(null);
       alert("Something went wrong: " + (err as Error).message);
       // No rollback needed usually, but you can add it if you want to be strict
     }
   };
 
+
+  const handleSendMessageToNode = useCallback(async (nodeId: string, text: string, files: File[]) => {
+    // Temporarily switch currentNodeId to the branch node, send, then restore
+    // We do this by saving branchingFromId state and re-using handleSendMessage logic
+    // but targeting a specific existing node
+    if (isGenerating || !text.trim()) return;
+    setIsGenerating(true);
+    setGeneratingNodeId(nodeId);
+    const perfStart = performance.now();
+
+    const targetNodeId = nodeId;
+    const node = workspace.nodes[nodeId];
+    if (!node) { setIsGenerating(false); setGeneratingNodeId(null); return; }
+
+    const currentMessages = node.messages;
+    const timestamp = Date.now();
+    const userMsg: Message = {
+      role: 'user',
+      content: text,
+      timestamp,
+      ordinal: currentMessages.length,
+    };
+
+    // Optimistically add user message
+    setWorkspace(prev => {
+      const n = prev.nodes[targetNodeId];
+      if (!n) return prev;
+      return { ...prev, nodes: { ...prev.nodes, [targetNodeId]: { ...n, messages: [...n.messages, userMsg] } } };
+    });
+
+    try {
+      // Build context for this node's full history path
+      const historyPath = getFullHistoryPath(targetNodeId);
+      const aiContext = historyPath.flatMap(n =>
+        n.messages.map(m => ({ role: m.role === 'model' ? 'assistant' : 'user', content: m.content }))
+      );
+
+      const stream = await generateResponse(text, aiContext as any, files, selectedModel);
+
+      let fullResponse = '';
+      const aiMsgTimestamp = Date.now();
+      const aiMsg: Message = { role: 'model', content: '', timestamp: aiMsgTimestamp, ordinal: userMsg.ordinal + 1 };
+
+      setWorkspace(prev => {
+        const n = prev.nodes[targetNodeId];
+        if (!n) return prev;
+        return { ...prev, nodes: { ...prev.nodes, [targetNodeId]: { ...n, messages: [...n.messages, aiMsg] } } };
+      });
+
+      for await (const chunk of stream) {
+        if ('error' in chunk) break;
+        const content = chunk.choices?.[0]?.delta?.content;
+        if (content) {
+          fullResponse += content;
+          setWorkspace(prev => {
+            const n = prev.nodes[targetNodeId];
+            if (!n) return prev;
+            const updatedMessages = [...n.messages];
+            const lastMsg = updatedMessages[updatedMessages.length - 1];
+            if (lastMsg.role === 'model' && lastMsg.timestamp === aiMsgTimestamp) {
+              lastMsg.content = fullResponse;
+            }
+            return { ...prev, nodes: { ...prev.nodes, [targetNodeId]: { ...n, messages: updatedMessages } } };
+          });
+          await new Promise(r => setTimeout(r, 0));
+        }
+      }
+
+      setIsGenerating(false);
+      setGeneratingNodeId(null);
+
+      // Save messages to DB
+      await dbService.createMessage({ nodes_id: targetNodeId, role: 'user', content: text, ordinal: userMsg.ordinal });
+      await dbService.createMessage({ nodes_id: targetNodeId, role: 'model', content: fullResponse, ordinal: aiMsg.ordinal });
+
+      console.log(`✅ [BRANCH MINI CHAT] Total time: ${(performance.now() - perfStart).toFixed(0)}ms`);
+    } catch (err) {
+      console.error('Mini chat send failed:', err);
+      setIsGenerating(false);
+      setGeneratingNodeId(null);
+    }
+  }, [isGenerating, workspace.nodes, getFullHistoryPath, selectedModel]);
 
   const handleClearAll = () => {
     if (confirm("Purge all topological data from local storage?")) {
@@ -860,8 +953,13 @@ useEffect(() => {
             <ChatView 
               history={getFullHistoryPath(workspace.currentNodeId)} 
               onSendMessage={handleSendMessage} 
+              onSendMessageToNode={handleSendMessageToNode}
+              onSelectNode={(id) => setWorkspace(prev => ({ ...prev, currentNodeId: id, branchingFromId: null, viewMode: 'chat' }))}
               branchLines={branchLines}
-              onBranch={(id) => setWorkspace(p => ({ ...p, branchingFromId: id, viewMode: 'chat' }))}  isGenerating={isGenerating}
+              nodes={workspace.nodes}
+              onBranch={(id) => setWorkspace(p => ({ ...p, branchingFromId: id, viewMode: 'chat' }))}
+              isGenerating={isGenerating}
+              generatingNodeId={generatingNodeId}
               isBranching={!!workspace.branchingFromId}
               onCancelBranch={() => setWorkspace(prev => ({ ...prev, branchingFromId: null }))}
               currentNodeId={workspace.currentNodeId}
