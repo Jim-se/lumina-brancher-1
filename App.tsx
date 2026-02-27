@@ -5,6 +5,7 @@ import { ChatState, ChatNode, Message } from './types';
 import { ChatView, BranchMetadata } from './components/ChatView';
 import { NodeView } from './components/NodeView';
 import { ProfileView } from './components/ProfileView';
+import { useTheme } from './src/contexts/ThemeContext';
 //import { generateResponse, generateTitle } from './services/geminiService';
 import { dbService } from './services/dbService';
 import { supabase } from './services/supabaseClient';
@@ -47,6 +48,9 @@ const App: React.FC = () => {
     viewMode: 'chat',
     branchingFromId: null,
   });
+
+  const [isThemeMenuOpen, setIsThemeMenuOpen] = useState(false);
+  const { theme, mode, setTheme, setMode } = useTheme();
 
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatingNodeId, setGeneratingNodeId] = useState<string | null>(null);
@@ -145,8 +149,14 @@ const App: React.FC = () => {
     let currentId: string | null = nodeId;
 
     while (currentId && workspace.nodes[currentId]) {
-      path.unshift(workspace.nodes[currentId]);
-      currentId = workspace.nodes[currentId].parentId;
+      const node = workspace.nodes[currentId];
+      path.unshift(node);
+      // If this node was created as a "side question" (mini chat),
+      // we treat it as the start of a new history chain for playback/display.
+      if (node.branchMessageId) {
+        break;
+      }
+      currentId = node.parentId;
     }
     return path;
   }, [workspace.nodes]);
@@ -317,7 +327,8 @@ const App: React.FC = () => {
             title: '...',
             timestamp: timestamp,
             childrenIds: [],
-            isBranch: isBranching
+            isBranch: isBranching,
+            branchMessageId: branchMetadata?.messageId
           }
         };
 
@@ -694,318 +705,329 @@ const App: React.FC = () => {
     setWorkspace(p => ({ ...p, branchingFromId: id, currentNodeId: id, viewMode: 'chat' }));
   }, []);
 
+
   return (
-    <>
-      {location.pathname === '/profile' ? (
-        <ProfileView fullName={fullName} email={email} createdAt={createdAt} onBack={() => navigate('/')} />
-      ) : (
-        <div className="flex h-screen w-screen bg-[#020203] text-zinc-100 overflow-hidden">
-          {/* Sidebar */}
-          <aside className={`${sidebarCollapsed ? 'w-[60px]' : 'w-[300px]'} bg-[#050505] border-r border-zinc-900 flex flex-col z-[110] shadow-2xl transition-all duration-300 ease-in-out relative`}>
-            {/* LOGO + COLLAPSE TOGGLE */}
-            <div className="flex items-center gap-4 pointer-events-auto pt-10 px-4 mb-4 justify-between">
-              {!sidebarCollapsed && (
-                <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 bg-zinc-900 border border-zinc-800 rounded-xl flex items-center justify-center shadow-2xl shrink-0">
-                    <svg className="w-6 h-6 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <div className="flex h-screen w-screen bg-[var(--app-bg)] text-[var(--app-text)] overflow-hidden font-inter selection:bg-[var(--accent-color)]/20 selection:text-[var(--app-text)]">
+      <Routes>
+        <Route path="/profile" element={
+          <ProfileView
+            fullName={fullName}
+            email={email}
+            createdAt={createdAt}
+            onBack={() => navigate('/')}
+            onReportBug={handleReportBug}
+          />
+        } />
+        <Route path="/" element={
+          <div className="flex h-full w-full overflow-hidden">
+            <aside
+              className={`
+                relative flex flex-col bg-[var(--sidebar-bg)] border-r border-[var(--sidebar-border)] transition-all duration-[450ms] ease-[cubic-bezier(0.2,0.8,0.2,1)] z-[200]
+                ${sidebarCollapsed ? 'w-0 opacity-0 pointer-events-none' : 'w-72 opacity-100'}
+              `}
+            >
+              {/* LOGO + COLLAPSE TOGGLE */}
+              <div className="flex items-center gap-4 pointer-events-auto pt-10 px-4 mb-4 justify-between">
+                {!sidebarCollapsed && (
+                  <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 bg-[var(--card-bg)] border border-[var(--border-color)] rounded-xl flex items-center justify-center shadow-sm shrink-0">
+                      <svg className="w-6 h-6 text-[var(--accent-color)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h1 className="text-[13px] font-bold tracking-tight uppercase text-[var(--app-text)]">LLM-Brancher</h1>
+                      <p className="text-[8px] font-bold tracking-[0.2em] uppercase text-[var(--app-text-muted)]">Alpha Version</p>
+                    </div>
+                  </div>
+                )}
+                {sidebarCollapsed && (
+                  <div className="w-10 h-10 bg-[var(--card-bg)] border border-[var(--border-color)] rounded-xl flex items-center justify-center shadow-sm mx-auto">
+                    <svg className="w-6 h-6 text-[var(--accent-color)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M13 10V3L4 14h7v7l9-11h-7z" />
                     </svg>
                   </div>
-                  <div>
-                    <h1 className="text-[13px] font-black tracking-[0.4em] uppercase text-white">LLM-Brancher</h1>
-                    <p className="text-[8px] font-bold tracking-[0.2em] uppercase text-zinc-600">Alpha Version</p>
-                  </div>
-                </div>
-              )}
-              {sidebarCollapsed && (
-                <div className="w-10 h-10 bg-zinc-900 border border-zinc-800 rounded-xl flex items-center justify-center shadow-2xl mx-auto">
-                  <svg className="w-6 h-6 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                  </svg>
-                </div>
-              )}
-              {!sidebarCollapsed && (
-                <button
-                  onClick={() => setSidebarCollapsed(true)}
-                  className="p-2 rounded-lg hover:bg-zinc-800 text-zinc-500 hover:text-zinc-300 transition-all shrink-0"
-                  title="Collapse sidebar"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
-                  </svg>
-                </button>
-              )}
-            </div>
-
-            {/* Expand button when collapsed */}
-            {sidebarCollapsed && (
-              <button
-                onClick={() => setSidebarCollapsed(false)}
-                className="mx-auto mt-2 mb-4 p-2 rounded-lg hover:bg-zinc-800 text-zinc-500 hover:text-zinc-300 transition-all"
-                title="Expand sidebar"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
-                </svg>
-              </button>
-            )}
-
-            {/* Collapsed: just show New Chat icon */}
-            {sidebarCollapsed ? (
-              <div className="flex flex-col items-center gap-4 px-2">
-                <button
-                  onClick={() => handleSelectConversation(null)}
-                  className="w-10 h-10 flex items-center justify-center bg-zinc-900 border border-zinc-800 hover:border-blue-500 hover:bg-zinc-800 rounded-xl transition-all active:scale-95"
-                  title="New Chat"
-                >
-                  <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 4v16m8-8H4" />
-                  </svg>
-                </button>
-              </div>
-            ) : (
-              <>
-                <div className="p-6">
+                )}
+                {!sidebarCollapsed && (
                   <button
-                    onClick={() => handleSelectConversation(null)}
-                    className="w-full flex items-center justify-center gap-3 py-4 bg-zinc-900 border border-zinc-800 hover:border-blue-500 hover:bg-zinc-800 rounded-2xl transition-all group active:scale-95 shadow-lg"
+                    onClick={() => setSidebarCollapsed(true)}
+                    className="p-2 rounded-lg hover:bg-[var(--card-hover)] text-[var(--app-text-muted)] hover:text-[var(--app-text)] transition-all shrink-0"
+                    title="Collapse sidebar"
                   >
-                    <div className="p-1 bg-blue-600/20 rounded-md">
-                      <svg className="w-4 h-4 text-blue-500 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 4v16m8-8H4" />
-                      </svg>
-
-                    </div>
-
-                    <span className="text-[11px] font-black uppercase tracking-[0.2em] text-zinc-300">New Chat</span>
-                  </button>
-                </div>
-
-                {/* <div className="px-6 mb-4 flex items-center justify-between">
-          <p className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-600">Chats</p>
-          
-        </div>
-          */}
-                <div className="flex-1 overflow-y-auto custom-scrollbar [mask-image:linear-gradient(to_bottom,black_96%,transparent_100%)] px-3 pb-4">
-                  {groupedConversations.length === 0 && (
-                    <div className="px-3 py-20 text-center opacity-10">
-                      <svg className="w-12 h-12 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeWidth={1} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
-                      <p className="text-[10px] font-bold uppercase tracking-widest">No active protocols</p>
-                    </div>
-                  )}
-
-                  <div className="space-y-6">
-                    {groupedConversations.map(([groupName, groupConvs]) => {
-                      const isCollapsed = collapsedGroups[groupName];
-
-                      return (
-                        <div key={groupName} className="space-y-1.5">
-
-                          {/* Group Header - Now a Toggle Button */}
-                          <button
-                            onClick={() => toggleGroup(groupName)}
-                            className="w-full flex items-center justify-between px-3 py-1 group/header hover:bg-zinc-900/50 rounded-lg transition-colors active:scale-[0.98]"
-                          >
-                            <h4 className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-500 group-hover/header:text-zinc-300 transition-colors">
-                              {groupName}
-                            </h4>
-
-                            {/* Animated Chevron */}
-                            <svg
-                              className={`w-3.5 h-3.5 text-zinc-600 transition-transform duration-200 ${isCollapsed ? '-rotate-90' : 'rotate-0'}`}
-                              fill="none"
-                              viewBox="0 0 24 24"
-                              stroke="currentColor"
-                            >
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                            </svg>
-                          </button>
-
-                          {/* Group Conversations - Conditionally Rendered */}
-                          {!isCollapsed && (
-                            <div className="space-y-1.5">
-                              {groupConvs.map((conv) => (
-                                <div
-                                  key={conv.id}
-                                  className={`relative group/conv rounded-2xl transition-all border ${activeConvId === conv.id ? 'bg-blue-600/10 border-blue-500/30 text-white shadow-inner ring-1 ring-blue-500/20' : 'bg-transparent border-transparent text-zinc-200 hover:bg-zinc-900 hover:text-zinc-300'}`}
-                                >
-                                  <button
-                                    onClick={() => handleSelectConversation(conv.id)}
-                                    className="w-full text-left px-5 py-3 rounded-2xl transition-all"
-                                  >
-                                    <h3 className="text-[13px] font-bold truncate pr-10 leading-tight">{conv.title}</h3>
-
-                                  </button>
-
-                                  {/* Delete Button */}
-                                  <button
-                                    onClick={(e) => handleDeleteConversation(conv.id, e)}
-                                    className="absolute right-3 top-1/2 -translate-y-1/2 p-2 opacity-0 group-hover/conv:opacity-100 hover:bg-red-600 bg-zinc-800 rounded-lg transition-all"
-                                    title="Delete conversation"
-                                  >
-                                    <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                    </svg>
-                                  </button>
-
-                                  {activeConvId === conv.id && (
-                                    <div className="" />
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div className="p-6 border-t border-zinc-900 bg-zinc-950/50">
-                  {/*    
-           <div className="flex items-center gap-3 opacity-100 grayscale group hover:grayscale-0 transition-all cursor-default">
-              
-              <button 
-            onClick={() => handleLogout()}
-            className="w-full flex mb-3 items-center justify-center gap-3 py-4 bg-zinc-900 border border-zinc-800 hover:border-blue-500 hover:bg-zinc-800 rounded-2xl transition-all group active:scale-95 shadow-lg"
-          >
-            
-            <span className="text-[11px] font-black uppercase tracking-[0.2em] text-zinc-300">LOG OUT</span>
-          </button>
-          
-          
-           </div>
-*/}
-                  <button
-                    onClick={() => navigate('/profile')}
-                    className="w-full flex items-center p-3 gap-4 bg-zinc-900 border border-zinc-800 hover:border-zinc-700 hover:bg-zinc-800/50 rounded-2xl transition-all active:scale-[0.98] shadow-lg group"
-                  >
-                    {/* Avatar Placeholder */}
-                    <div className="h-10 w-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold shrink-0 shadow-inner">
-                      {fullName?.charAt(0) || 'U'}
-                    </div>
-
-                    {/* User Info */}
-                    <div className="flex flex-col items-start overflow-hidden">
-                      <span className="text-sm font-semibold text-zinc-100 truncate ">
-                        {fullName || ""}
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-black uppercase tracking-wider text-zinc-500">
-                          Free Plan
-                        </span>
-
-                      </div>
-                    </div>
-
-                    {/* Optional: Caret icon to show it's clickable */}
-                    <svg
-                      className="ml-auto w-4 h-4 text-zinc-600 group-hover:text-zinc-400 transition-colors"
-                      fill="none" viewBox="0 0 24 24" stroke="currentColor"
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
                     </svg>
                   </button>
-
-                </div>
-              </>
-            )}
-          </aside>
-
-          {/* Main Workspace */}
-          <div className="flex-1 flex flex-col relative overflow-hidden bg-black">
-            <header className="z-[100] h-20 bg-black/50 backdrop-blur-md px-10 flex items-center justify-between absolute top-0 left-0 right-0 border-b border-zinc-900/50">
-              <div className="flex items-center gap-6 overflow-hidden">
-                <h2 className="text-[13px] font-black tracking-[0.2em] uppercase text-white truncate max-w-[300px]">
-                  {currentTitle}
-                </h2>
-                {workspace.currentNodeId && (
-                  <div className="flex items-center gap-2 px-3 py-1 bg-zinc-900 border border-zinc-800 rounded-full">
-                    <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest">Branch</span>
-                    <span className="text-[10px] font-mono text-blue-500">
-                      {workspace.nodes[workspace.currentNodeId]?.hierarchicalID}
-                    </span>
-                  </div>
                 )}
               </div>
 
-              <div className="flex items-center gap-4">
+              {/* Expand button when collapsed */}
+              {sidebarCollapsed && (
                 <button
-                  onClick={handleReportBug}
-                  className="text-[10px] opacity-60 text-red-500 hover:text-red-400 font-bold uppercase tracking-widest flex items-center gap-2"
+                  onClick={() => setSidebarCollapsed(false)}
+                  className="mx-auto mt-2 mb-4 p-2 rounded-lg hover:bg-[var(--card-hover)] text-[var(--app-text-muted)] hover:text-[var(--app-text)] transition-all"
+                  title="Expand sidebar"
                 >
-
-                  Report Bug/Feedback
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                  </svg>
                 </button>
-                <button
-                  onClick={() => {
-                    console.log('🔄 [VIEW SWITCH] Switching from', workspace.viewMode, 'to', workspace.viewMode === 'chat' ? 'node' : 'chat');
+              )}
 
-                    setWorkspace(p => ({ ...p, viewMode: p.viewMode === 'chat' ? 'node' : 'chat' }))
-                  }
-                  }
-                  className={`flex items-center gap-3 px-6 py-2.5 rounded-xl transition-all duration-300 border ${workspace.viewMode === 'chat'
-                    ? 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white'
-                    : 'bg-blue-600 border-blue-500 text-white shadow-[0_0_20px_rgba(37,99,235,0.3)]'
-                    }`}
-                >
-                  <span className="text-[10px] font-black uppercase tracking-widest">
-                    {workspace.viewMode === 'chat' ? 'Map Overview' : 'Back to Chat'}
-                  </span>
-                </button>
-              </div>
-            </header>
+              {/* Collapsed: just show New Chat icon */}
+              {sidebarCollapsed ? (
+                <div className="flex flex-col items-center gap-4 px-2">
+                  <button
+                    onClick={() => handleSelectConversation(null)}
+                    className="w-10 h-10 flex items-center justify-center bg-[var(--app-text)] text-[var(--app-bg)] hover:bg-[var(--accent-color)] rounded-xl transition-all active:scale-95"
+                    title="New Chat"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 4v16m8-8H4" />
+                    </svg>
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <div className="p-6">
+                    <button
+                      onClick={() => handleSelectConversation(null)}
+                      className="w-full flex items-center justify-center gap-3 py-3 bg-[var(--card-bg)] border border-[var(--border-color)] hover:border-[var(--accent-color)] hover:bg-[var(--card-hover)] rounded-xl transition-all group active:scale-95 shadow-sm"
+                    >
+                      <div className="p-1 bg-[var(--accent-color)]/10 rounded-md">
+                        <svg className="w-4 h-4 text-[var(--accent-color)] group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+                        </svg>
+                      </div>
+                      <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-[var(--app-text)]">New Chat</span>
+                    </button>
+                  </div>
 
-            <main className="flex-1 relative overflow-hidden ">
-              {isSwitching && (
-                <div className="absolute inset-0 z-[150] bg-black/20 backdrop-blur-xl flex flex-col items-center justify-center transition-all duration-500">
-                  <div className="relative">
-                    <div className="w-16 h-16 rounded-full border-t-2 border-blue-500 animate-spin" />
-                    <div className="absolute inset-0 m-auto w-8 h-8 bg-blue-500/20 rounded-full animate-pulse flex items-center justify-center">
-                      <div className="w-2 h-2 bg-blue-500 rounded-full shadow-[0_0_10px_rgba(59,130,246,1)]" />
+                  <div className="flex-1 overflow-y-auto custom-scrollbar [mask-image:linear-gradient(to_bottom,black_96%,transparent_100%)] px-3 pb-4">
+                    {groupedConversations.length === 0 && (
+                      <div className="px-3 py-20 text-center opacity-10">
+                        <svg className="w-12 h-12 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeWidth={1} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
+                        <p className="text-[10px] font-bold uppercase tracking-widest">No active protocols</p>
+                      </div>
+                    )}
+
+                    <div className="space-y-6">
+                      {groupedConversations.map(([groupName, groupConvs]) => {
+                        const isCollapsed = collapsedGroups[groupName];
+
+                        return (
+                          <div key={groupName} className="space-y-1.5">
+                            <button
+                              onClick={() => toggleGroup(groupName)}
+                              className="w-full flex items-center justify-between px-3 py-1 group/header hover:bg-[var(--card-hover)] rounded-lg transition-colors active:scale-[0.98]"
+                            >
+                              <h4 className="text-[9px] font-black uppercase tracking-[0.2em] text-[var(--app-text-muted)] group-hover/header:text-[var(--app-text)] transition-colors">
+                                {groupName}
+                              </h4>
+                              <svg
+                                className={`w-3.5 h-3.5 text-[var(--app-text-muted)] transition-transform duration-200 ${isCollapsed ? '-rotate-90' : 'rotate-0'}`}
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                              >
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                              </svg>
+                            </button>
+
+                            {!isCollapsed && (
+                              <div className="space-y-1.5">
+                                {groupConvs.map((conv) => (
+                                  <div
+                                    key={conv.id}
+                                    className={`relative group/conv rounded-xl transition-all border ${activeConvId === conv.id ? 'bg-[var(--card-hover)] border-[var(--border-color)] text-[var(--app-text)]' : 'bg-transparent border-transparent text-[var(--app-text-muted)] hover:bg-[var(--card-hover)]/50 hover:text-[var(--app-text)]'}`}
+                                  >
+                                    <button
+                                      onClick={() => handleSelectConversation(conv.id)}
+                                      className="w-full text-left px-4 py-2.5 rounded-xl transition-all"
+                                    >
+                                      <h3 className="text-sm font-medium truncate pr-10 leading-tight">{conv.title}</h3>
+                                    </button>
+
+                                    <button
+                                      onClick={(e) => handleDeleteConversation(conv.id, e)}
+                                      className="absolute right-3 top-1/2 -translate-y-1/2 p-2 opacity-0 group-hover/conv:opacity-100 hover:bg-red-600 text-white bg-[var(--app-text)] rounded-lg transition-all"
+                                      title="Delete conversation"
+                                    >
+                                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                      </svg>
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
 
-                </div>
-              )}
-              <div className={`absolute inset-0 transition-all duration-170 ease-in-out ${workspace.viewMode === 'chat' ? 'blur-3xl grayscale opacity-10 scale-100 pointer-events-none' : 'opacity-100 scale-100'}`}>
-                <NodeView
-                  nodes={workspace.nodes}
-                  rootNodeId={workspace.rootNodeId}
-                  currentNodeId={workspace.currentNodeId}
-                  viewMode={workspace.viewMode}
-                  onSelectNode={handleNodeSelect}
-                  onBranchNode={handleNodeBranch}
-                />
-              </div>
+                  <div className="p-4 border-t border-[var(--sidebar-border)] bg-[var(--sidebar-bg)]">
+                    <button
+                      onClick={() => navigate('/profile')}
+                      className="w-full flex items-center p-2.5 gap-3 bg-[var(--card-bg)] border border-[var(--border-color)] hover:border-[var(--accent-color)] hover:bg-[var(--card-hover)] rounded-xl transition-all active:scale-[0.98] shadow-sm group"
+                    >
+                      <div className="h-10 w-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold shrink-0 shadow-inner">
+                        {fullName?.charAt(0) || 'U'}
+                      </div>
 
-              <div
-                className={`relative z-50 w-full h-full flex items-center justify-center transition-all duration-[850ms] ease-[cubic-bezier(0.19,1,0.22,1)] ${workspace.viewMode === 'chat' ? 'chat-layer-enter scale-100 opacity-100 translate-y-0' : 'chat-layer-exit scale-[0.95] opacity-0 translate-y-24 pointer-events-none'}`}
-              >
-                <ChatView
-                  history={getFullHistoryPath(workspace.currentNodeId)}
-                  onSendMessage={handleSendMessage}
-                  onSendMessageToNode={handleSendMessageToNode}
-                  onSelectNode={handleNodeSelect}
-                  branchLines={branchLines}
-                  nodes={workspace.nodes}
-                  onBranch={handleNodeBranch}
-                  isGenerating={isGenerating}
-                  generatingNodeId={generatingNodeId}
-                  isBranching={!!workspace.branchingFromId}
-                  onCancelBranch={() => setWorkspace(prev => ({ ...prev, branchingFromId: null }))}
-                  currentNodeId={workspace.currentNodeId}
-                  currentTitle={currentTitle}
-                  selectedModel={selectedModel}
-                  onModelSelect={setSelectedModel}
-                  onStopGeneration={stopGeneration}
-                />
-              </div>
-            </main>
+                      <div className="flex flex-col items-start overflow-hidden text-[var(--app-text)]">
+                        <span className="text-sm font-medium truncate ">
+                          {fullName || ""}
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-black uppercase tracking-wider text-[var(--app-text-muted)]">
+                            Free Plan
+                          </span>
+                        </div>
+                      </div>
+
+                      <svg
+                        className="ml-auto w-4 h-4 text-[var(--app-text-muted)] group-hover:text-[var(--app-text)] transition-colors"
+                        fill="none" viewBox="0 0 24 24" stroke="currentColor"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </button>
+                  </div>
+                </>
+              )}
+            </aside>
+
+            {/* Main Workspace */}
+            <div className="flex-1 flex flex-col relative overflow-hidden bg-[var(--app-bg)]">
+              <header className="z-[100] h-16 bg-[var(--header-bg)] backdrop-blur-md px-10 flex items-center justify-between absolute top-0 left-0 right-0 border-b border-[var(--header-border)]">
+                <div className="flex items-center gap-6 overflow-hidden">
+                  <h2 className="text-sm font-semibold tracking-tight text-[var(--app-text)] truncate max-w-[300px]">
+                    {currentTitle}
+                  </h2>
+                  {workspace.currentNodeId && (
+                    <div className="flex items-center gap-2 px-2.5 py-0.5 bg-[var(--sidebar-bg)] border border-[var(--border-color)] rounded-full">
+                      <span className="text-[9px] font-bold text-[var(--app-text-muted)] uppercase tracking-wider">Branch</span>
+                      <span className="text-[10px] font-mono text-[var(--accent-color)]">
+                        {workspace.nodes[workspace.currentNodeId]?.hierarchicalID}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <div className="relative">
+                    <button
+                      onClick={() => setIsThemeMenuOpen(!isThemeMenuOpen)}
+                      className="p-2 text-[var(--app-text-muted)] hover:text-[var(--accent-color)] transition-colors rounded-xl hover:bg-[var(--card-hover)]"
+                      title="Appearance"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m12.728 0l-.707-.707M6.343 6.343l-.707-.707M12 5a7 7 0 100 14 7 7 0 000-14z" />
+                      </svg>
+                    </button>
+
+                    {isThemeMenuOpen && (
+                      <div className="absolute top-[calc(100%+12px)] right-0 w-48 bg-[var(--card-bg)] border border-[var(--border-color)] rounded-2xl shadow-2xl p-2 z-[110] animate-in fade-in slide-in-from-top-2">
+                        <div className="px-3 py-2 text-[10px] font-bold text-[var(--app-text-muted)] uppercase tracking-widest border-b border-[var(--border-color)] mb-2">
+                          Appearance
+                        </div>
+
+                        <div className="space-y-1 mb-3">
+                          <button
+                            onClick={() => { setTheme('chatgpt'); setIsThemeMenuOpen(false); }}
+                            className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition-all ${theme === 'chatgpt' ? 'bg-[var(--accent-color)] text-white' : 'text-[var(--app-text)] hover:bg-[var(--card-hover)]'}`}
+                          >
+                            ChatGPT Theme
+                            {theme === 'chatgpt' && <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>}
+                          </button>
+                          <button
+                            onClick={() => { setTheme('claude'); setIsThemeMenuOpen(false); }}
+                            className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition-all ${theme === 'claude' ? 'bg-[var(--accent-color)] text-white' : 'text-[var(--app-text)] hover:bg-[var(--card-hover)]'}`}
+                          >
+                            Claude Theme
+                            {theme === 'claude' && <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>}
+                          </button>
+                        </div>
+
+                        <div className="flex gap-1 p-1 bg-[var(--sidebar-bg)] rounded-xl">
+                          <button
+                            onClick={() => { setMode('light'); setIsThemeMenuOpen(false); }}
+                            className={`flex-1 flex items-center justify-center gap-2 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-all ${mode === 'light' ? 'bg-[var(--card-bg)] text-[var(--accent-color)] shadow-sm' : 'text-[var(--app-text-muted)] hover:text-[var(--app-text)]'}`}
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m12.728 0l-.707-.707M6.343 6.343l-.707-.707M12 5a7 7 0 100 14 7 7 0 000-14z" /></svg>
+                            Light
+                          </button>
+                          <button
+                            onClick={() => { setMode('dark'); setIsThemeMenuOpen(false); }}
+                            className={`flex-1 flex items-center justify-center gap-2 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-all ${mode === 'dark' ? 'bg-[var(--card-bg)] text-[var(--accent-color)] shadow-sm' : 'text-[var(--app-text-muted)] hover:text-[var(--app-text)]'}`}
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg>
+                            Dark
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <button
+                    onClick={() => setWorkspace(p => ({ ...p, viewMode: p.viewMode === 'chat' ? 'node' : 'chat' }))}
+                    className={`flex items-center gap-3 px-5 py-2 rounded-xl transition-all duration-300 border ${workspace.viewMode === 'chat'
+                      ? 'bg-[var(--card-bg)] border-[var(--border-color)] text-[var(--app-text)] hover:border-[var(--accent-color)] shadow-sm'
+                      : 'bg-[var(--accent-color)] border-[var(--accent-color)] text-white shadow-sm'
+                      }`}
+                  >
+                    <span className="text-[10px] font-bold uppercase tracking-widest">
+                      {workspace.viewMode === 'chat' ? 'Map Overview' : 'Back to Chat'}
+                    </span>
+                  </button>
+                </div>
+              </header>
+
+              <main className="flex-1 relative overflow-hidden">
+                {isSwitching && (
+                  <div className="absolute inset-0 z-[150] bg-[var(--app-bg)]/40 backdrop-blur-xl flex flex-col items-center justify-center">
+                    <div className="w-16 h-16 rounded-full border-t-2 border-[var(--accent-color)] animate-spin" />
+                  </div>
+                )}
+                <div className={`absolute inset-0 transition-all duration-300 ${workspace.viewMode === 'chat' ? 'blur-3xl grayscale opacity-10 pointer-events-none' : 'opacity-100'}`}>
+                  <NodeView
+                    nodes={workspace.nodes}
+                    rootNodeId={workspace.rootNodeId}
+                    currentNodeId={workspace.currentNodeId}
+                    viewMode={workspace.viewMode}
+                    onSelectNode={handleNodeSelect}
+                    onBranchNode={handleNodeBranch}
+                  />
+                </div>
+
+                <div className={`relative z-50 w-full h-full transition-all duration-500 ${workspace.viewMode === 'chat' ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-12 pointer-events-none'}`}>
+                  <ChatView
+                    history={getFullHistoryPath(workspace.currentNodeId)}
+                    onSendMessage={handleSendMessage}
+                    onSendMessageToNode={handleSendMessageToNode}
+                    onSelectNode={handleNodeSelect}
+                    branchLines={branchLines}
+                    nodes={workspace.nodes}
+                    onBranch={handleNodeBranch}
+                    isGenerating={isGenerating}
+                    generatingNodeId={generatingNodeId}
+                    isBranching={!!workspace.branchingFromId}
+                    onCancelBranch={() => setWorkspace(prev => ({ ...prev, branchingFromId: null }))}
+                    currentNodeId={workspace.currentNodeId}
+                    currentTitle={currentTitle}
+                    selectedModel={selectedModel}
+                    onModelSelect={setSelectedModel}
+                    onStopGeneration={stopGeneration}
+                  />
+                </div>
+              </main>
+            </div>
           </div>
-        </div>
-      )}
-    </>
+        } />
+      </Routes>
+    </div>
   );
 };
 

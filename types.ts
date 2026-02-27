@@ -10,21 +10,22 @@ export interface Message {
    * Position within the node (0 = first, 1 = second, etc.)
    * This is critical for database sorting.
    */
-  ordinal: number; 
+  ordinal: number;
 }
 
 /**
  * Represents a "Turn" or "Branch Point" in the conversation tree.
  */
 export interface ChatNode {
-  id: string; 
+  id: string;
   hierarchicalID: string;       // The "Cool ID" (1.a.1)
-  parentId: string | null; 
-  messages: Message[]; 
+  parentId: string | null;
+  messages: Message[];
   title: string;     // AI summary
-  timestamp: number; 
-  childrenIds: string[]; 
+  timestamp: number;
+  childrenIds: string[];
   isBranch: boolean;
+  branchMessageId?: string | null;
 }
 
 export interface ChatState {

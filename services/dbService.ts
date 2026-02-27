@@ -14,7 +14,7 @@ export const dbService = {
 
   async fetchUserProfile(): Promise<{ fullName: string | null; email: string | undefined; createdAt: string | undefined } | null> {
     const { data: { user } } = await supabase.auth.getUser();
-    
+
     if (!user) return null;
 
     const { data, error } = await supabase
@@ -22,14 +22,14 @@ export const dbService = {
       .select('full_name')
       .eq('id', user.id)
       .single();
-      
+
     if (error) {
       console.warn("Could not fetch user profile:", error);
       return { fullName: null, email: user.email, createdAt: user.created_at };
     }
-    
-    return { 
-      fullName: data?.full_name || null, 
+
+    return {
+      fullName: data?.full_name || null,
       email: user.email,
       createdAt: user.created_at
     };
@@ -44,7 +44,7 @@ export const dbService = {
       .from('nodes')
       .select('*')
       .eq('conversations_id', conversationId);
-    
+
     if (nodesError) throw nodesError;
 
     // 2. Fetch messages for these nodes
@@ -77,7 +77,8 @@ export const dbService = {
           })),
         childrenIds: nodesData
           .filter(child => child.parent_id === n.id)
-          .map(child => child.id)
+          .map(child => child.id),
+        branchMessageId: n.branch_message_id
       };
     });
 
@@ -115,7 +116,7 @@ export const dbService = {
     });
 
     if (error) throw error;
-    
+
     return {
       conv: { id: data.conversation_id, title, user_id: user.id },
       rootNode: { id: data.node_id, hierarchical_id: '1' }
@@ -125,7 +126,7 @@ export const dbService = {
   async createConversation(title: string) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
-    
+
     const { data, error } = await supabase
       .from('conversations')
       .insert({ title, user_id: user.id })
@@ -140,19 +141,19 @@ export const dbService = {
       .from('conversations')
       .delete()
       .eq('id', conversationId);
-    
+
     if (error) throw error;
   },
 
   async updateConversationState(id: string, updates: { root_node_id?: string, current_node_id?: string, title?: string }) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
-    
+
     const { error } = await supabase
       .from('conversations')
       .update({ ...updates, updated_at: new Date().toISOString() })
       .eq('id', id)
-      .eq('user_id', user.id);      
+      .eq('user_id', user.id);
     if (error) throw error;
   },
 
@@ -171,12 +172,12 @@ export const dbService = {
     if (error) throw error;
   },
 
-  async createNode(payload: { 
+  async createNode(payload: {
     id?: string;
-    conversations_id: string; 
-    parent_id: string | null; 
-    hierarchical_id: string; 
-    is_branch: boolean; 
+    conversations_id: string;
+    parent_id: string | null;
+    hierarchical_id: string;
+    is_branch: boolean;
     title?: string;
     // Branch line positioning — only set for branch nodes created via the mini composer
     branch_message_id?: string;
@@ -221,10 +222,10 @@ export const dbService = {
     if (error) throw error;
   },
 
-  async createMessage(payload: { 
-    nodes_id: string; 
-    role: string; 
-    content: string; 
+  async createMessage(payload: {
+    nodes_id: string;
+    role: string;
+    content: string;
     ordinal: number;
   }) {
     const { data: { user } } = await supabase.auth.getUser();

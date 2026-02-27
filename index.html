@@ -1,64 +1,170 @@
-
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LLM-Brancher</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap"
+        rel="stylesheet">
     <!-- React Flow Styles -->
     <link rel="stylesheet" href="https://esm.sh/reactflow@11.11.4/dist/style.css">
     <style>
+        :root {
+            /* Default ChatGPT Light */
+            --app-bg: #ffffff;
+            --app-inner-bg: #ffffff;
+            --app-text: #09090b;
+            --app-text-muted: #71717a;
+            --sidebar-bg: #f4f4f5;
+            --sidebar-border: #e4e4e7;
+            --header-bg: rgba(255, 255, 255, 0.85);
+            --header-border: #e4e4e7;
+            --border-color: #e4e4e7;
+            --card-bg: #ffffff;
+            --card-hover: #f4f4f5;
+            --msg-user: #f4f4f5;
+            --msg-bot: transparent;
+            --input-bg: #ffffff;
+            --accent-color: #10a37f;
+            /* ChatGPT Green */
+            --accent-hover: #1a7f64;
+            --node-bg: #ffffff;
+            --shadow-color: rgba(0, 0, 0, 0.05);
+        }
+
+        [data-mode="dark"] {
+            --app-bg: #171717;
+            --app-inner-bg: #171717;
+            --app-text: #f4f4f5;
+            --app-text-muted: #a1a1aa;
+            --sidebar-bg: #111111;
+            --sidebar-border: #27272a;
+            --header-bg: rgba(23, 23, 23, 0.85);
+            --header-border: #27272a;
+            --border-color: #27272a;
+            --card-bg: #212121;
+            --card-hover: #2d2d2d;
+            --msg-user: #2d2d2d;
+            --msg-bot: transparent;
+            --input-bg: #212121;
+            --node-bg: #212121;
+            --shadow-color: rgba(0, 0, 0, 0.3);
+        }
+
+        [data-theme="claude"] {
+            --app-bg: #fbfaf8;
+            --app-inner-bg: #fbfaf8;
+            --sidebar-bg: #f1ede5;
+            --sidebar-border: #e5e0d5;
+            --header-bg: rgba(251, 250, 248, 0.85);
+            --header-border: #e5e0d5;
+            --border-color: #e5e0d5;
+            --app-text: #1d1c1a;
+            --app-text-muted: #6b6a68;
+            --card-bg: #ffffff;
+            --card-hover: #f1ede5;
+            --accent-color: #ca7657;
+            /* Claude Orange */
+            --accent-hover: #b36347;
+            --msg-user: #f1ede5;
+            --node-bg: #ffffff;
+            --shadow-color: rgba(60, 50, 40, 0.05);
+        }
+
+        [data-theme="claude"][data-mode="dark"] {
+            --app-bg: #0d0d0d;
+            --app-inner-bg: #0d0d0d;
+            --sidebar-bg: #161616;
+            --sidebar-border: #2b2b2b;
+            --header-bg: rgba(13, 13, 13, 0.85);
+            --header-border: #2b2b2b;
+            --border-color: #2b2b2b;
+            --app-text: #d7d7d7;
+            --app-text-muted: #8d8d8d;
+            --card-bg: #1a1a1a;
+            --card-hover: #222222;
+            --msg-user: #222222;
+            --node-bg: #1a1a1a;
+            --shadow-color: rgba(0, 0, 0, 0.4);
+        }
+
         body {
-            font-family: 'Inter', sans-serif;
-            background-color: #050505;
-            color: #e5e5e5;
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            background-color: var(--app-bg);
+            color: var(--app-text);
             overflow: hidden;
+            transition: background-color 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+                color 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+                border-color 0.4s cubic-bezier(0.4, 0, 0.2, 1);
         }
+
         .custom-scrollbar::-webkit-scrollbar {
-            width: 4px;
+            width: 8px;
+            height: 8px;
         }
+
         .custom-scrollbar::-webkit-scrollbar-track {
             background: transparent;
         }
+
         .custom-scrollbar::-webkit-scrollbar-thumb {
-            background: #27272a;
-            border-radius: 10px;
+            background: var(--border-color);
+            border-radius: 20px;
+            border: 2px solid var(--app-bg);
         }
+
         .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-            background: #3f3f46;
+            background: var(--app-text-muted);
         }
-        
+
         /* React Flow Overrides */
         .react-flow__node {
             cursor: pointer !important;
         }
+
         .react-flow__edge-path {
-            stroke: #27272a !important;
-            stroke-width: 2px !important;
+            stroke-width: 2.5px !important;
+            transition: stroke 0.4s ease;
         }
+
         .react-flow__handle {
             visibility: hidden;
         }
+
         .react-flow__controls {
-            border-radius: 12px !important;
+            border-radius: 16px !important;
             overflow: hidden !important;
-            border: 1px solid #27272a !important;
+            border: 1px solid var(--border-color) !important;
+            box-shadow: 0 10px 15px -3px var(--shadow-color) !important;
+            background-color: var(--card-bg) !important;
         }
+
         .react-flow__controls button {
-            background-color: #0a0a0a !important;
-            fill: #71717a !important;
-            border-bottom: 1px solid #1a1a1a !important;
+            background-color: var(--card-bg) !important;
+            fill: var(--app-text-muted) !important;
+            border-bottom: 1px solid var(--border-color) !important;
+            transition: all 0.2s ease;
         }
+
         .react-flow__controls button:hover {
-            background-color: #18181b !important;
+            background-color: var(--card-hover) !important;
+            fill: var(--accent-color) !important;
         }
+
         .react-flow__attribution {
             display: none;
         }
+
+        .react-flow__minimap {
+            border-radius: 20px !important;
+            background-color: var(--card-bg) !important;
+            border: 1px solid var(--border-color) !important;
+            box-shadow: 0 10px 15px -3px var(--shadow-color) !important;
+        }
     </style>
-<script type="importmap">
+    <script type="importmap">
 {
   "imports": {
     "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
@@ -69,10 +175,11 @@
   }
 }
 </script>
-<link rel="stylesheet" href="/index.css">
 </head>
+
 <body>
     <div id="root"></div>
-<script type="module" src="/index.tsx"></script>
+    <script type="module" src="/index.tsx"></script>
 </body>
+
 </html>

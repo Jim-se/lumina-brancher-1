@@ -2,9 +2,19 @@ import React, { useRef, useEffect, useMemo, useState, useCallback } from 'react'
 import { ChatNode, Message } from '../types';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { oneLight, vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { useTheme } from '../src/contexts/ThemeContext';
+export interface BranchMetadata {
+  messageId: string;
+  blockId: string;
+  blockIndex: number;
+  relativeYInBlock: number;
+  textSnippet: string;
+  msgRelativeY: number;
+  targetNodeId?: string;
+}
 
-interface ChatViewProps {
+export interface ChatViewProps {
   history: ChatNode[];
   onSendMessage: (text: string, files: File[], branchMetadata?: BranchMetadata) => void;
   onSendMessageToNode?: (nodeId: string, text: string, files: File[]) => void;
@@ -23,6 +33,8 @@ interface ChatViewProps {
   onStopGeneration?: () => void;
 }
 
+
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Branch ghost label — follows cursor, no cursor change
 // ─────────────────────────────────────────────────────────────────────────────
@@ -37,10 +49,10 @@ const BranchGhostLabel: React.FC<{ x: number; y: number }> = ({ x, y }) => (
     className="absolute pointer-events-none z-[70] flex items-center gap-1.5 select-none"
     style={{ left: x + 10, top: y - 9 }}
   >
-    <svg className="w-3.5 h-3.5 text-blue-400/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <svg className="w-3.5 h-3.5 text-blue-500/80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
     </svg>
-    <span className="text-[11px] font-semibold tracking-wide text-blue-400/60 uppercase whitespace-nowrap">
+    <span className="text-[11px] font-bold tracking-tight text-blue-500/80 uppercase whitespace-nowrap">
       Create branch
     </span>
   </div>
@@ -90,7 +102,7 @@ const BranchComposer: React.FC<BranchComposerProps & { composerRef: React.RefObj
   return (
     <div
       ref={composerRef}
-      className="branch-composer-ui absolute z-[60] bg-zinc-900 border border-zinc-700/80 rounded-xl shadow-2xl shadow-black/60 flex flex-col p-1.5 animate-in fade-in zoom-in-95 duration-150 transition-all"
+      className="branch-composer-ui absolute z-[60] bg-[var(--card-bg)] border border-[var(--border-color)] rounded-xl shadow-[0_20px_50px_rgba(0,0,0,0.15)] flex flex-col p-1.5 animate-in fade-in zoom-in-95 duration-150 transition-all"
       style={{
         top: anchorY - 24,
         left: 'calc(50% + 384px + 12px)',
@@ -104,9 +116,9 @@ const BranchComposer: React.FC<BranchComposerProps & { composerRef: React.RefObj
       {files.length > 0 && (
         <div className="flex gap-2 pb-2 px-1 overflow-x-auto custom-scrollbar">
           {files.map((file, i) => (
-            <div key={i} className="flex items-center gap-1.5 bg-zinc-800 rounded-lg px-2 py-1 text-[10px] text-zinc-300 border border-zinc-700 shrink-0">
+            <div key={i} className="flex items-center gap-1.5 bg-[var(--sidebar-bg)] rounded-lg px-2 py-1 text-[10px] text-[var(--app-text-muted)] border border-[var(--border-color)] shrink-0">
               <span className="truncate max-w-[100px]">{file.name}</span>
-              <button type="button" onClick={() => removeFile(i)} className="hover:text-red-400 transition-colors">✕</button>
+              <button type="button" onClick={() => removeFile(i)} className="hover:text-red-500 transition-colors">✕</button>
             </div>
           ))}
         </div>
@@ -114,7 +126,7 @@ const BranchComposer: React.FC<BranchComposerProps & { composerRef: React.RefObj
 
       {/* Top Row: Input & Actions */}
       <div className="flex items-center gap-1">
-        <button type="button" onClick={onClose} title="Cancel (Esc)" className="p-1 text-zinc-600 hover:text-zinc-300 transition-colors rounded shrink-0">
+        <button type="button" onClick={onClose} title="Cancel (Esc)" className="p-1 text-[var(--app-text-muted)] hover:text-[var(--app-text)] transition-colors rounded shrink-0">
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
         </button>
 
@@ -128,14 +140,14 @@ const BranchComposer: React.FC<BranchComposerProps & { composerRef: React.RefObj
             if (e.key === 'Escape') onClose();
           }}
           placeholder="Type a branch prompt…"
-          className="flex-1 bg-transparent border-none text-sm text-zinc-200 placeholder:text-zinc-600 focus:ring-0 outline-none px-1 min-w-0"
+          className="flex-1 bg-transparent border-none text-sm text-[var(--app-text)] placeholder:text-[var(--app-text-muted)] focus:ring-0 outline-none px-1 min-w-0"
         />
 
         <button
           type="button"
           onClick={() => setIsExpanded(!isExpanded)}
           title="Toggle Options"
-          className={`p-1 transition-colors rounded shrink-0 ${isExpanded ? 'text-zinc-300 bg-zinc-800' : 'text-zinc-600 hover:text-zinc-400'}`}
+          className={`p-1 transition-colors rounded shrink-0 ${isExpanded ? 'text-[var(--app-text)] bg-[var(--sidebar-bg)]' : 'text-[var(--app-text-muted)] hover:text-[var(--app-text)]'}`}
         >
           <svg className={`w-3.5 h-3.5 transition-transform duration-200 ${isExpanded ? 'rotate-180' : 'rotate-0'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
@@ -146,7 +158,7 @@ const BranchComposer: React.FC<BranchComposerProps & { composerRef: React.RefObj
           type="button"
           onClick={handleSend}
           disabled={!text.trim() && files.length === 0}
-          className="bg-blue-600 hover:bg-blue-500 disabled:opacity-30 disabled:cursor-not-allowed text-white p-1.5 rounded-lg transition-all shrink-0"
+          className="bg-[var(--accent-color)] hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed text-white p-1.5 rounded-lg transition-all shrink-0"
         >
           <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" /></svg>
         </button>
@@ -154,12 +166,12 @@ const BranchComposer: React.FC<BranchComposerProps & { composerRef: React.RefObj
 
       {/* Expanded Bottom Row: File & Model Options */}
       {isExpanded && (
-        <div className="flex items-center gap-2 pt-2 pb-0.5 px-1 mt-1 border-t border-zinc-700/50 animate-in slide-in-from-top-2 fade-in duration-200">
+        <div className="flex items-center gap-2 pt-2 pb-0.5 px-1 mt-1 border-t border-[var(--border-color)] animate-in slide-in-from-top-2 fade-in duration-200">
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
             title="Attach files"
-            className="p-1.5 text-zinc-400 hover:text-blue-400 rounded-full transition-all hover:bg-zinc-800"
+            className="p-1.5 text-[var(--app-text-muted)] hover:text-[var(--accent-color)] rounded-full transition-all hover:bg-[var(--sidebar-bg)]"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
@@ -170,23 +182,23 @@ const BranchComposer: React.FC<BranchComposerProps & { composerRef: React.RefObj
             <button
               type="button"
               onClick={() => setIsModelMenuOpen(!isModelMenuOpen)}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium text-zinc-400 hover:text-white bg-zinc-800/40 hover:bg-zinc-800 transition-all group"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold text-[var(--app-text-muted)] hover:text-[var(--app-text)] bg-[var(--sidebar-bg)] transition-all group border border-[var(--border-color)]"
             >
               <span className="truncate max-w-[120px]">{currentModel?.name || 'Branch Model'}</span>
-              <svg className="w-3.5 h-3.5 text-zinc-500 group-hover:text-zinc-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l4-4 4 4m0 6l-4 4-4-4" /></svg>
+              <svg className="w-3.5 h-3.5 text-[var(--app-text-muted)] group-hover:text-[var(--app-text)]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l4-4 4 4m0 6l-4 4-4-4" /></svg>
             </button>
 
             {/* Mini Model Menu */}
             {isModelMenuOpen && (
-              <div className="absolute top-[calc(100%+6px)] left-0 w-48 max-h-48 overflow-y-auto bg-zinc-900 border border-zinc-700 rounded-xl shadow-xl z-[70] p-1 custom-scrollbar">
+              <div className="absolute top-[calc(100%+6px)] left-0 w-48 max-h-48 overflow-y-auto bg-[var(--card-bg)] border border-[var(--border-color)] rounded-xl shadow-xl z-[70] p-1 custom-scrollbar">
                 {MODELS.map(model => (
                   <button
                     key={model.id}
                     onClick={() => { onModelSelect(model.id); setIsModelMenuOpen(false); }}
-                    className={`w-full flex justify-between items-center text-left px-2 py-1.5 text-[11px] rounded-lg transition-colors ${selectedModel === model.id ? 'bg-zinc-800 text-white font-medium' : 'text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200'}`}
+                    className={`w-full flex justify-between items-center text-left px-2 py-1.5 text-[11px] rounded-lg transition-colors ${selectedModel === model.id ? 'bg-[var(--accent-color)]/20 text-[var(--app-text)] font-semibold' : 'text-[var(--app-text-muted)] hover:bg-[var(--sidebar-bg)] hover:text-[var(--app-text)]'}`}
                   >
                     <span className="truncate">{model.name}</span>
-                    {selectedModel === model.id && <svg className="w-3 h-3 text-blue-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>}
+                    {selectedModel === model.id && <svg className="w-3 h-3 text-[var(--accent-color)] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>}
                   </button>
                 ))}
               </div>
@@ -201,19 +213,6 @@ const BranchComposer: React.FC<BranchComposerProps & { composerRef: React.RefObj
 // ─────────────────────────────────────────────────────────────────────────────
 // useBranchInteraction hook
 // ─────────────────────────────────────────────────────────────────────────────
-
-// 1. ADD THIS INTERFACE
-export interface BranchMetadata {
-  messageId: string;
-  blockId: string;
-  blockIndex: number;
-  relativeYInBlock: number;
-  textSnippet: string;
-  msgRelativeY: number; // For rendering the blue line
-  targetNodeId?: string; // The node created by this branch
-}
-
-// 2. UPDATE THIS INTERFACE
 interface ActiveBranch {
   y: number;
   nodeId: string;
@@ -518,29 +517,32 @@ interface BranchMiniChatProps {
   containerRef: React.RefObject<HTMLDivElement>;
 }
 
-const MiniMarkdown: React.FC<{ content: string }> = ({ content }) => (
-  <ReactMarkdown
-    components={{
-      p: ({ node, ...props }) => <p className="mb-1.5 last:mb-0 leading-relaxed text-zinc-300" {...props} />,
-      code: ({ node, inline, className, children, ...props }: any) => {
-        if (inline) return <code className="bg-zinc-800 text-blue-400 px-1 py-0.5 rounded text-[10px] font-mono" {...props}>{children}</code>;
-        return <pre className="bg-zinc-900 border border-zinc-700/50 rounded-lg p-2 my-1.5 overflow-x-auto custom-scrollbar"><code className="text-[10px] font-mono text-zinc-300" {...props}>{children}</code></pre>;
-      },
-      strong: ({ node, ...props }) => <strong className="font-bold text-white" {...props} />,
-      em: ({ node, ...props }) => <em className="italic text-zinc-400" {...props} />,
-      ul: ({ node, ...props }) => <ul className="list-disc list-inside mb-1.5 space-y-0.5 text-zinc-300" {...props} />,
-      ol: ({ node, ...props }) => <ol className="list-decimal list-inside mb-1.5 space-y-0.5 text-zinc-300" {...props} />,
-      li: ({ node, ...props }) => <li className="text-zinc-300" {...props} />,
-      h1: ({ node, ...props }) => <h1 className="text-sm font-bold text-white mb-1" {...props} />,
-      h2: ({ node, ...props }) => <h2 className="text-xs font-bold text-white mb-1" {...props} />,
-      h3: ({ node, ...props }) => <h3 className="text-xs font-semibold text-zinc-200 mb-1" {...props} />,
-      blockquote: ({ node, ...props }) => <blockquote className="border-l-2 border-zinc-600 pl-2 italic text-zinc-400 my-1" {...props} />,
-      a: ({ node, ...props }) => <a className="text-blue-400 hover:text-blue-300 underline" target="_blank" rel="noopener noreferrer" {...props} />,
-    }}
-  >
-    {content}
-  </ReactMarkdown>
-);
+const MiniMarkdown: React.FC<{ content: string }> = ({ content }) => {
+  const { mode } = useTheme();
+  return (
+    <ReactMarkdown
+      components={{
+        p: ({ node, ...props }) => <p className="mb-1.5 last:mb-0 leading-relaxed text-[var(--app-text)] opacity-90" {...props} />,
+        code: ({ node, inline, className, children, ...props }: any) => {
+          if (inline) return <code className="bg-[var(--sidebar-bg)] text-[var(--accent-color)] px-1 py-0.5 rounded text-[10px] font-mono border border-[var(--border-color)]" {...props}>{children}</code>;
+          return <pre className="bg-[var(--sidebar-bg)] border border-[var(--border-color)] rounded-lg p-2 my-1.5 overflow-x-auto custom-scrollbar"><code className="text-[10px] font-mono text-[var(--app-text)] opacity-80" {...props}>{children}</code></pre>;
+        },
+        strong: ({ node, ...props }) => <strong className="font-bold text-[var(--app-text)]" {...props} />,
+        em: ({ node, ...props }) => <em className="italic text-[var(--app-text-muted)]" {...props} />,
+        ul: ({ node, ...props }) => <ul className="list-disc list-inside mb-1.5 space-y-0.5 text-[var(--app-text)] opacity-90" {...props} />,
+        ol: ({ node, ...props }) => <ol className="list-decimal list-inside mb-1.5 space-y-0.5 text-[var(--app-text)] opacity-90" {...props} />,
+        li: ({ node, ...props }) => <li className="text-[var(--app-text)] opacity-90" {...props} />,
+        h1: ({ node, ...props }) => <h1 className="text-sm font-bold text-[var(--app-text)] mb-1" {...props} />,
+        h2: ({ node, ...props }) => <h2 className="text-xs font-bold text-[var(--app-text)] mb-1" {...props} />,
+        h3: ({ node, ...props }) => <h3 className="text-xs font-semibold text-[var(--app-text)] opacity-80 mb-1" {...props} />,
+        blockquote: ({ node, ...props }) => <blockquote className="border-l-2 border-[var(--border-color)] pl-2 italic text-[var(--app-text-muted)] my-1" {...props} />,
+        a: ({ node, ...props }) => <a className="text-[var(--accent-color)] hover:opacity-80 underline" target="_blank" rel="noopener noreferrer" {...props} />,
+      }}
+    >
+      {content}
+    </ReactMarkdown>
+  );
+};
 
 const BranchMiniChat: React.FC<BranchMiniChatProps> = ({
   line, uniqueMsgId, branchNode, isGeneratingThisNode, title, onSendMessage, onGoToNode, onStopGeneration, containerRef
@@ -555,39 +557,40 @@ const BranchMiniChat: React.FC<BranchMiniChatProps> = ({
 
   useEffect(() => {
     const updatePosition = () => {
-      const container = containerRef.current;
+      const scrollContent = containerRef.current;
       const msgEl = document.querySelector<HTMLElement>(`[data-message-id="${uniqueMsgId}"]`);
-      if (!container || !msgEl) return;
+      if (!scrollContent || !msgEl) return;
 
       const mdWrapper = msgEl.querySelector('.md-content');
-      const containerRect = container.getBoundingClientRect();
+      const contentRect = scrollContent.getBoundingClientRect();
       const msgRect = msgEl.getBoundingClientRect();
 
       let lineTop: number;
       if (mdWrapper && mdWrapper.children[line.blockIndex]) {
         const blockEl = mdWrapper.children[line.blockIndex] as HTMLElement;
         const blockRect = blockEl.getBoundingClientRect();
-        lineTop = (blockRect.top - containerRect.top) + (blockRect.height * line.relativeYInBlock);
+        // Calculate offset relative to the TOP of the scroll content (this is constant regardless of scroll)
+        lineTop = (blockRect.top - contentRect.top) + (blockRect.height * line.relativeYInBlock);
       } else {
-        lineTop = (msgRect.top - containerRect.top) + line.msgRelativeY;
+        lineTop = (msgRect.top - contentRect.top) + line.msgRelativeY;
       }
 
-      // Left edge: right side of the message bubble + gap
-      // The message bubble ends near calc(50% + 384px) of the container
-      const msgBubbleRight = msgRect.right - containerRect.left;
+      // Left edge: right side of the message bubble relative to content container
+      const msgBubbleRight = msgRect.right - contentRect.left;
       setPos({ top: lineTop, left: msgBubbleRight + LINE_WIDTH });
     };
 
     updatePosition();
     window.addEventListener('resize', updatePosition);
-    // Also update on scroll since the message moves vertically
-    const scrollEl = containerRef.current?.querySelector('.overflow-y-auto');
-    scrollEl?.addEventListener('scroll', updatePosition);
+
+    // We NO LONGER need the scroll listener because the parent div now scrolls these nodes natively!
+    // This is what removes the lag.
+
     return () => {
       window.removeEventListener('resize', updatePosition);
-      scrollEl?.removeEventListener('scroll', updatePosition);
     };
-  }, [line, uniqueMsgId, containerRef]);
+  }, [line, uniqueMsgId, containerRef, history.length]); // Re-run when history changes to adjust for new content layout
+
 
   useEffect(() => {
     if (!collapsed) messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -621,7 +624,7 @@ const BranchMiniChat: React.FC<BranchMiniChatProps> = ({
 
       {/* Mini chat panel — pointer-events-auto so it captures mouse fully */}
       <div
-        className="pointer-events-auto absolute flex flex-col bg-zinc-950 border border-blue-500/30 rounded-2xl shadow-2xl shadow-black/80 overflow-hidden transition-all duration-200"
+        className="pointer-events-auto absolute flex flex-col bg-white border border-zinc-200 rounded-2xl shadow-xl overflow-hidden transition-all duration-200"
         style={{
           top: panelTop - pos.top,
           left: 0,
@@ -631,9 +634,9 @@ const BranchMiniChat: React.FC<BranchMiniChatProps> = ({
         onWheel={e => e.stopPropagation()} // keep scroll inside the mini chat
       >
         {/* Header */}
-        <div className="flex items-center gap-2 px-2.5 py-1.5 border-b border-zinc-800/80 bg-zinc-900/80 shrink-0">
-          <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-pulse shrink-0" />
-          <span className="text-[10px] font-black uppercase tracking-widest text-blue-300 truncate flex-1 min-w-0">
+        <div className="flex items-center gap-2 px-2.5 py-1.5 border-b border-zinc-100 bg-zinc-50 shrink-0">
+          <div className="w-1.5 h-1.5 bg-blue-500 rounded-full shrink-0" />
+          <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-600 truncate flex-1 min-w-0">
             {displayTitle}
           </span>
           {isGeneratingThisNode && (
@@ -667,7 +670,7 @@ const BranchMiniChat: React.FC<BranchMiniChatProps> = ({
               )}
               {messages.map((msg, i) => (
                 <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-[92%] px-2.5 py-1.5 rounded-xl leading-relaxed ${msg.role === 'user' ? 'bg-zinc-700/70 text-white rounded-tr-none text-[11px]' : 'bg-transparent pl-0'
+                  <div className={`max-w-[92%] px-2.5 py-1.5 rounded-xl leading-relaxed ${msg.role === 'user' ? 'bg-[#f4f4f4] border border-zinc-200 text-zinc-900 rounded-tr-none text-[11px]' : 'bg-transparent pl-0'
                     }`}>
                     {msg.role === 'user' ? msg.content : (
                       msg.content
@@ -684,7 +687,7 @@ const BranchMiniChat: React.FC<BranchMiniChatProps> = ({
               )}
               <div ref={messagesEndRef} />
             </div>
-            <div className="shrink-0 border-t border-zinc-800/80 px-2 py-1.5 flex items-center gap-1.5 bg-zinc-900/60">
+            <div className="shrink-0 border-t border-zinc-100 px-2 py-1.5 flex items-center gap-1.5 bg-white">
               <input
                 type="text"
                 value={input}
@@ -694,11 +697,11 @@ const BranchMiniChat: React.FC<BranchMiniChatProps> = ({
                 }}
                 placeholder="Continue branch…"
                 disabled={isGeneratingThisNode}
-                className="flex-1 bg-transparent text-[11px] text-zinc-200 placeholder:text-zinc-600 outline-none border-none min-w-0 disabled:opacity-50"
+                className="flex-1 bg-transparent text-[11px] text-zinc-900 placeholder:text-zinc-400 outline-none border-none min-w-0 disabled:opacity-50"
               />
               {isGeneratingThisNode ? (
                 <button type="button" onClick={onStopGeneration} title="Stop generating"
-                  className="p-1 text-red-400 hover:text-red-300 transition-colors shrink-0">
+                  className="p-1 text-red-500 hover:text-red-600 transition-colors shrink-0">
                   <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
                     <rect x="6" y="6" width="12" height="12" rx="2" ry="2" />
                   </svg>
@@ -706,9 +709,9 @@ const BranchMiniChat: React.FC<BranchMiniChatProps> = ({
               ) : (
                 <button type="button" onClick={handleSend}
                   disabled={!input.trim()}
-                  className="p-1 text-blue-400 hover:text-blue-300 disabled:opacity-30 disabled:cursor-not-allowed transition-colors shrink-0">
-                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
+                  className="p-1 text-blue-600 hover:text-blue-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors shrink-0">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
                   </svg>
                 </button>
               )}
@@ -740,6 +743,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
   onModelSelect,
   onStopGeneration,
 }) => {
+  const { mode } = useTheme();
   const [input, setInput] = React.useState('');
   const [files, setFiles] = useState<File[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -751,6 +755,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
 
   // Track where the submit came from — only scroll to bottom for 'main'
   const [loadingSource, setLoadingSource] = useState<'main' | 'branch'>('main');
@@ -811,15 +816,15 @@ export const ChatView: React.FC<ChatViewProps> = ({
     }
   }, [history, loadingSource, userHasScrolledUp]);
 
-  // ADD THIS: Force scroll to bottom when currentNodeId changes (e.g., navigating to a branch)
+  // Force scroll to top when currentNodeId changes (e.g., expanding a branch)
   useEffect(() => {
     if (scrollRef.current) {
-      isAtBottomRef.current = true;
-      setUserHasScrolledUp(false);
+      isAtBottomRef.current = false;
+      setUserHasScrolledUp(true);
       // Slight delay to allow DOM to render new history
       setTimeout(() => {
         if (scrollRef.current) {
-          scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+          scrollRef.current.scrollTop = 0;
         }
       }, 50);
     }
@@ -906,6 +911,16 @@ export const ChatView: React.FC<ChatViewProps> = ({
     }, 0);
   };
 
+  const historyMessageIds = useMemo(() => {
+    const ids = new Set<string>();
+    history.forEach((node) => {
+      node.messages.forEach((_, idx) => {
+        ids.add(`${node.id}-${idx}`);
+      });
+    });
+    return ids;
+  }, [history]);
+
   const allMessages: { msg: Message, nodeId: string, isLastInNode: boolean }[] = [];
   history.forEach((node) => {
     node.messages.forEach((msg, idx) => {
@@ -936,36 +951,6 @@ export const ChatView: React.FC<ChatViewProps> = ({
         }}
       />
 
-      {/* Mini chat overlays — rendered above the branch zone (z-[60]) so they capture events first */}
-      {branchLines.map((line, i) => {
-        const branchNode = line.targetNodeId ? nodes[line.targetNodeId] : undefined;
-        const isGeneratingThisNode = isGenerating && generatingNodeId === line.targetNodeId;
-        const activeNode = history.find(n => n.id === currentNodeId);
-        const displayTitle = (activeNode as any)?.title || currentTitle;
-        return (
-          <BranchMiniChat
-            key={line.targetNodeId ?? i}
-            line={line}
-            uniqueMsgId={line.messageId}
-            branchNode={branchNode}
-            isGeneratingThisNode={isGeneratingThisNode}
-            title={displayTitle}
-            containerRef={containerRef}
-            onSendMessage={
-              line.targetNodeId && onSendMessageToNode
-                ? (text, files) => onSendMessageToNode!(line.targetNodeId!, text, files)
-                : undefined
-            }
-            onGoToNode={
-              line.targetNodeId && onSelectNode
-                ? () => onSelectNode!(line.targetNodeId!)
-                : undefined
-            }
-            onStopGeneration={onStopGeneration}
-          />
-        );
-      })}
-
       {activeBranch && (
         <BranchComposer
           anchorY={activeBranch.y}
@@ -978,142 +963,176 @@ export const ChatView: React.FC<ChatViewProps> = ({
       )}
 
       {allMessages.length === 0 && !isGenerating && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center text-zinc-700 gap-4 pointer-events-none z-0">
-          <div className="w-16 h-16 bg-zinc-900 rounded-2xl flex items-center justify-center border border-zinc-800">
-            <svg className="w-8 h-8 text-zinc-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div className="absolute inset-0 flex flex-col items-center justify-center text-zinc-300 gap-4 pointer-events-none z-0">
+          <div className="w-16 h-16 bg-zinc-50 rounded-2xl flex items-center justify-center border border-zinc-100">
+            <svg className="w-8 h-8 text-zinc-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
             </svg>
           </div>
-          <p className="text-lg font-medium tracking-wide">Enter a prompt to start this chat.</p>
+          <p className="text-lg font-medium tracking-tight text-zinc-400">Enter a prompt to start this chat.</p>
         </div>
       )}
 
       <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto custom-scrollbar relative z-10">
-        <div className="max-w-3xl mx-auto px-6 pt-8 pb-12 space-y-8">
-          {allMessages.map(({ msg, nodeId }, idx) => {
-            const uniqueMsgId = `${nodeId}-${idx}`;
+        <div className="relative w-full" ref={contentRef}>
+          <div className="max-w-3xl mx-auto px-6 pt-8 pb-12 space-y-8">
+            {allMessages.map(({ msg, nodeId }, idx) => {
+              const uniqueMsgId = `${nodeId}-${idx}`;
 
-            return (
-              <div
-                id={`msg-${idx}`}
-                key={uniqueMsgId}
-                data-node-id={nodeId}
-                data-message-id={uniqueMsgId}
-                className={`flex w-full ${msg.role === 'user' ? 'justify-end' : 'justify-start'} group animate-in fade-in slide-in-from-bottom-2 duration-500`}
-              >
-                <div className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'} max-w-full`}>
-                  <div className={`max-w-full px-5 py-3 rounded-3xl relative transition-all duration-300 ${msg.role === 'user' ? 'bg-zinc-800/60 text-white rounded-tr-none border border-zinc-700/30' : 'bg-transparent text-zinc-200 rounded-tl-none border-none pl-0'}`}>
+              return (
+                <div
+                  id={`msg-${idx}`}
+                  key={uniqueMsgId}
+                  data-node-id={nodeId}
+                  data-message-id={uniqueMsgId}
+                  className={`flex w-full ${msg.role === 'user' ? 'justify-end' : 'justify-start'} group animate-in fade-in slide-in-from-bottom-2 duration-500`}
+                >
+                  <div className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'} max-w-full`}>
+                    <div className={`max-w-full px-5 py-3 rounded-2xl relative transition-all duration-300 ${msg.role === 'user' ? 'bg-[#f4f4f4] text-zinc-900 border border-zinc-200' : 'bg-transparent text-zinc-800 pl-0'}`}>
 
-                    <div className="md-content relative z-10">
-                      <ReactMarkdown components={{
-                        code: ({ node, inline, className, children, ...props }: any) => {
-                          const match = /language-(\w+)/.exec(className || '');
-                          const codeContent = String(children).replace(/\n$/, '');
+                      <div className="md-content relative z-10">
+                        <ReactMarkdown components={{
+                          code: ({ node, inline, className, children, ...props }: any) => {
+                            const match = /language-(\w+)/.exec(className || '');
+                            const codeContent = String(children).replace(/\n$/, '');
 
-                          if (inline) return <code className="bg-zinc-800 text-blue-400 px-2 py-1 rounded text-sm font-mono" {...props}>{children}</code>;
+                            if (inline) return <code className="bg-zinc-100 text-blue-600 px-1.5 py-0.5 rounded text-sm font-mono whitespace-nowrap" {...props}>{children}</code>;
 
-                          return (
-                            <div className="relative group/code my-4 rounded-lg overflow-hidden border border-zinc-700/50">
-                              <div className="flex items-center justify-between px-4 py-2 bg-zinc-900 border-b border-zinc-800 text-xs text-zinc-400">
-                                <span className="font-mono">{match ? match[1] : 'code'}</span>
-                                <button
-                                  onClick={() => navigator.clipboard.writeText(codeContent)}
-                                  className="flex items-center gap-1.5 hover:text-white transition-colors"
-                                >
-                                  <svg
-                                    className="w-4 h-4"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    viewBox="0 0 24 24"
-                                    xmlns="http://www.w3.org/2000/svg"
+                            return (
+                              <div className="relative group/code my-4 rounded-xl overflow-hidden border border-zinc-200">
+                                <div className="flex items-center justify-between px-4 py-2 bg-zinc-50 border-b border-zinc-200 text-xs text-zinc-500 font-medium">
+                                  <span className="font-mono">{match ? match[1] : 'code'}</span>
+                                  <button
+                                    onClick={() => navigator.clipboard.writeText(codeContent)}
+                                    className="flex items-center gap-1.5 hover:text-white transition-colors"
                                   >
-                                    <path
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                      strokeWidth={2}
-                                      d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10a2 2 0 00-2 2v8a2 2 0 002 2h8a2 2 0 002-2v-8a2 2 0 00-2-2z"
-                                    />
-                                  </svg>                                  <span>Copy</span>
-                                </button>
-                              </div>
-                              {match ? (
-                                <SyntaxHighlighter
-                                  style={vscDarkPlus}
-                                  language={match[1]}
-                                  PreTag="div"
-                                  className="!my-0 !bg-[#0d0d0d] custom-scrollbar"
-                                  customStyle={{ margin: 0, padding: '1.5rem', background: '#0d0d0d' }}
-                                  {...props}
-                                >
-                                  {codeContent}
-                                </SyntaxHighlighter>
-                              ) : (
-                                <div className="p-4 bg-[#0d0d0d] overflow-x-auto custom-scrollbar">
-                                  <code className="font-mono text-sm text-zinc-200" {...props}>{children}</code>
+                                    <svg
+                                      className="w-4 h-4"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      viewBox="0 0 24 24"
+                                      xmlns="http://www.w3.org/2000/svg"
+                                    >
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10a2 2 0 00-2 2v8a2 2 0 002 2h8a2 2 0 002-2v-8a2 2 0 00-2-2z"
+                                      />
+                                    </svg>                                  <span>Copy</span>
+                                  </button>
                                 </div>
-                              )}
-                            </div>
-                          );
-                        },
-                        h1: ({ node, ...props }) => <h1 className="text-2xl font-bold mb-4 text-white" {...props} />,
-                        h2: ({ node, ...props }) => <h2 className="text-xl font-bold mb-3 text-white" {...props} />,
-                        h3: ({ node, ...props }) => <h3 className="text-lg font-bold mb-2 text-white" {...props} />,
-                        p: ({ node, ...props }) => <p className={`leading-relaxed ${msg.role === 'user' ? 'mb-0' : 'mb-4 text-zinc-300'}`} {...props} />,
-                        ul: ({ node, ...props }) => <ul className="list-disc list-inside mb-4 space-y-2 text-zinc-300" {...props} />,
-                        ol: ({ node, ...props }) => <ol className="list-decimal list-inside mb-4 space-y-2 text-zinc-300" {...props} />,
-                        li: ({ node, ...props }) => <li className="text-zinc-300" {...props} />,
-                        strong: ({ node, ...props }) => <strong className="font-bold text-white" {...props} />,
-                        a: ({ node, ...props }) => <a className="text-blue-400 hover:text-blue-300 underline" target="_blank" rel="noopener noreferrer" {...props} />,
-                        blockquote: ({ node, ...props }) => <blockquote className="border-l-4 border-zinc-600 pl-4 italic text-zinc-400 my-4" {...props} />,
-                      }}>
-                        {msg.content}
-                      </ReactMarkdown>
+                                {match ? (
+                                  <SyntaxHighlighter
+                                    style={mode === 'dark' ? vscDarkPlus : oneLight}
+                                    language={match[1]}
+                                    PreTag="div"
+                                    className={`!my-0 !bg-transparent custom-scrollbar ${mode === 'dark' ? 'bg-[#1e1e1e]' : 'bg-zinc-50'}`}
+                                    customStyle={{ margin: 0, padding: '1.5rem', background: 'transparent' }}
+                                    {...props}
+                                  >
+                                    {codeContent}
+                                  </SyntaxHighlighter>
+                                ) : (
+                                  <div className={`p-4 border rounded-xl overflow-x-auto custom-scrollbar ${mode === 'dark' ? 'bg-[#1e1e1e] border-[#2e2e2e]' : 'bg-zinc-50 border-zinc-100'}`}>
+                                    <code className={`font-mono text-sm ${mode === 'dark' ? 'text-zinc-300' : 'text-zinc-800'}`} {...props}>{children}</code>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          },
+                          h1: ({ node, ...props }) => <h1 className="text-2xl font-bold mb-4 text-[var(--app-text)]" {...props} />,
+                          h2: ({ node, ...props }) => <h2 className="text-xl font-bold mb-3 text-[var(--app-text)]" {...props} />,
+                          h3: ({ node, ...props }) => <h3 className="text-lg font-bold mb-2 text-[var(--app-text)]" {...props} />,
+                          p: ({ node, ...props }) => <p className={`leading-relaxed ${msg.role === 'user' ? 'mb-0' : 'mb-4 text-[var(--app-text)] opacity-90'}`} {...props} />,
+                          ul: ({ node, ...props }) => <ul className="list-disc list-inside mb-4 space-y-2 text-[var(--app-text)] opacity-90" {...props} />,
+                          ol: ({ node, ...props }) => <ol className="list-decimal list-inside mb-4 space-y-2 text-[var(--app-text)] opacity-90" {...props} />,
+                          li: ({ node, ...props }) => <li className="text-[var(--app-text)] opacity-90" {...props} />,
+                          strong: ({ node, ...props }) => <strong className="font-bold text-[var(--app-text)]" {...props} />,
+                          a: ({ node, ...props }) => <a className="text-[var(--accent-color)] hover:opacity-80 underline" target="_blank" rel="noopener noreferrer" {...props} />,
+                          blockquote: ({ node, ...props }) => <blockquote className="border-l-4 border-[var(--border-color)] pl-4 italic text-[var(--app-text-muted)] my-4" {...props} />,
+                        }}>
+                          {msg.content}
+                        </ReactMarkdown>
+                      </div>
+                    </div>
+
+                    <div className={`mt-1.5 flex items-center gap-3 opacity-40 group-hover:opacity-100 focus-within:opacity-100 transition-all ${msg.role === 'user' ? 'text-zinc-500 pr-2' : 'text-zinc-500 pl-1'}`}>
+                      {msg.role === 'model' && (
+                        <button onClick={() => onBranch(nodeId)} className="flex items-center gap-1.5 hover:text-blue-400 transition-colors py-1">
+                          <span className="text-[10px] uppercase font-bold tracking-widest">Create new branch</span>
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" /></svg>
+                        </button>
+                      )}
+                      <button onClick={() => handleCopyMessage(msg.content, uniqueMsgId)} className="flex items-center gap-1.5 hover:text-blue-400 transition-colors py-1">
+                        <span className="text-[10px] uppercase font-bold tracking-widest">
+                          {copiedMessageId === uniqueMsgId ? 'Copied!' : 'Copy'}
+                        </span>
+                        {copiedMessageId === uniqueMsgId ? (
+                          <svg className="w-3.5 h-3.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                        ) : (
+                          <svg
+                            className="w-4 h-4"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                            xmlns="http://www.w3.org/2000/svg"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10a2 2 0 00-2 2v8a2 2 0 002 2h8a2 2 0 002-2v-8a2 2 0 00-2-2z"
+                            />
+                          </svg>)}
+                      </button>
                     </div>
                   </div>
-
-                  <div className={`mt-1.5 flex items-center gap-3 opacity-40 group-hover:opacity-100 focus-within:opacity-100 transition-all ${msg.role === 'user' ? 'text-zinc-500 pr-2' : 'text-zinc-500 pl-1'}`}>
-                    {msg.role === 'model' && (
-                      <button onClick={() => onBranch(nodeId)} className="flex items-center gap-1.5 hover:text-blue-400 transition-colors py-1">
-                        <span className="text-[10px] uppercase font-bold tracking-widest">Create new branch</span>
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" /></svg>
-                      </button>
-                    )}
-                    <button onClick={() => handleCopyMessage(msg.content, uniqueMsgId)} className="flex items-center gap-1.5 hover:text-blue-400 transition-colors py-1">
-                      <span className="text-[10px] uppercase font-bold tracking-widest">
-                        {copiedMessageId === uniqueMsgId ? 'Copied!' : 'Copy'}
-                      </span>
-                      {copiedMessageId === uniqueMsgId ? (
-                        <svg className="w-3.5 h-3.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
-                      ) : (
-                        <svg
-                          className="w-4 h-4"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                          xmlns="http://www.w3.org/2000/svg"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10a2 2 0 00-2 2v8a2 2 0 002 2h8a2 2 0 002-2v-8a2 2 0 00-2-2z"
-                          />
-                        </svg>)}
-                    </button>
-                  </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
 
-          {/* ONLY show this spinner if the request came from the main input */}
-          {isGenerating && loadingSource === 'main' && (
-            <div className="flex justify-start pl-8 py-2 animate-in fade-in duration-300">
-              <svg className="w-6 h-6 animate-spin text-blue-500" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-              </svg>
-            </div>
-          )}
+            {/* ONLY show this spinner if the request came from the main input */}
+            {isGenerating && loadingSource === 'main' && (
+              <div className="flex justify-start pl-8 py-2 animate-in fade-in duration-300">
+                <svg className="w-6 h-6 animate-spin text-blue-500" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                </svg>
+              </div>
+            )}
+          </div>
+
+          {/* Mini chat overlays — rendered inside the scroll CONTENT so they move natively! */}
+          {branchLines
+            .filter(line => historyMessageIds.has(line.messageId) && line.targetNodeId !== currentNodeId)
+            .map((line, i) => {
+              const branchNode = line.targetNodeId ? nodes[line.targetNodeId] : undefined;
+              const isGeneratingThisNode = isGenerating && generatingNodeId === line.targetNodeId;
+              const activeNode = history.find(n => n.id === currentNodeId);
+              const displayTitle = (activeNode as any)?.title || currentTitle;
+              return (
+                <BranchMiniChat
+                  key={line.targetNodeId ?? i}
+                  line={line}
+                  uniqueMsgId={line.messageId}
+                  branchNode={branchNode}
+                  isGeneratingThisNode={isGeneratingThisNode}
+                  title={displayTitle}
+                  containerRef={contentRef}
+                  onSendMessage={
+                    line.targetNodeId && onSendMessageToNode
+                      ? (text, files) => onSendMessageToNode!(line.targetNodeId!, text, files)
+                      : undefined
+                  }
+                  onGoToNode={
+                    line.targetNodeId && onSelectNode
+                      ? () => onSelectNode!(line.targetNodeId!)
+                      : undefined
+                  }
+                  onStopGeneration={onStopGeneration}
+                />
+              );
+            })}
         </div>
       </div>
 
@@ -1142,26 +1161,26 @@ export const ChatView: React.FC<ChatViewProps> = ({
         </div>
       </div>
 
-      <div className="w-full bg-gradient-to-t from-black via-black/80 to-transparent pb-10 pt-6 z-20">
+      <div className="w-full bg-gradient-to-t from-white via-white/80 to-transparent pb-10 pt-6 z-20">
         <div className="max-w-3xl mx-auto px-6">
           {isBranching && (
-            <div className="flex items-center justify-between px-6 py-3 bg-blue-600/10 border border-blue-500/30 text-blue-400 rounded-t-2xl mb-[-1px] mx-2 animate-in slide-in-from-bottom-2">
+            <div className="flex items-center justify-between px-6 py-2.5 bg-blue-50 border border-blue-100 text-blue-600 rounded-t-2xl mb-[-1px] mx-2 animate-in slide-in-from-bottom-2">
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
-                <span className="text-[10px] font-black uppercase tracking-widest">Creating new branch</span>
+                <span className="text-[10px] font-bold uppercase tracking-widest">Creating new branch</span>
               </div>
-              <button onClick={onCancelBranch} className="text-[9px] font-black uppercase hover:text-white transition-colors flex items-center gap-1">
+              <button onClick={onCancelBranch} className="text-[9px] font-bold uppercase hover:text-blue-700 transition-colors flex items-center gap-1">
                 Dismiss
               </button>
             </div>
           )}
 
-          <div className={`flex flex-col gap-0 bg-zinc-800/40 border rounded-[2rem] p-0.7 transition-all shadow-inner ${isBranching ? 'border-blue-500/50 rounded-t-2xl ring-2 ring-blue-500/10' : 'border-zinc-700/50 focus-within:border-zinc-500 focus-within:bg-zinc-800/60'}`}>
+          <div className={`flex flex-col gap-0 bg-white border rounded-[2rem] p-0.5 transition-all shadow-sm ${isBranching ? 'border-blue-500/50 rounded-t-none ring-2 ring-blue-500/5' : 'border-zinc-200 focus-within:border-zinc-300 focus-within:shadow-md'}`}>
 
             {files.length > 0 && (
               <div className="w-full flex gap-2 px-4 pt-4 overflow-x-auto custom-scrollbar">
                 {files.map((file, i) => (
-                  <div key={i} className="flex items-center gap-2 bg-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-300 border border-zinc-700 shrink-0">
+                  <div key={i} className="flex items-center gap-2 bg-zinc-50 rounded-lg px-3 py-2 text-xs text-zinc-600 border border-zinc-100 shrink-0">
                     <span className="truncate max-w-[150px]">{file.name}</span>
                     <button
                       type="button"
@@ -1195,8 +1214,8 @@ export const ChatView: React.FC<ChatViewProps> = ({
                     handleSubmit(e);
                   }
                 }}
-                placeholder={isBranching ? "Type your message..." : "Type your message..."}
-                className="w-full bg-transparent border-none px-2 py-2 text-base font-medium focus:outline-none placeholder:text-zinc-600 text-white resize-none overflow-y-auto custom-scrollbar min-h-[44px]"
+                placeholder={isBranching ? "What should this branch do?" : "Message Lumina..."}
+                className="w-full bg-transparent border-none px-2 py-2 text-base font-medium focus:outline-none placeholder:text-zinc-400 text-zinc-900 resize-none overflow-y-auto custom-scrollbar min-h-[44px]"
                 style={{ minHeight: '44px', maxHeight: '200px', height: 'auto' }}
                 rows={1}
                 onInput={(e) => {
@@ -1223,15 +1242,15 @@ export const ChatView: React.FC<ChatViewProps> = ({
                   <button
                     type="button"
                     onClick={() => setIsModelMenuOpen(!isModelMenuOpen)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium text-zinc-400 hover:text-white transition-all group"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold text-zinc-500 hover:text-zinc-900 hover:bg-zinc-200/50 transition-all group"
                   >
                     <span>{MODELS.find(m => m.id === selectedModel)?.name || 'Select Model'}</span>
-                    <svg className={`w-3.5 h-3.5 transition-transform ${isModelMenuOpen ? 'rotate-180 text-white' : 'text-zinc-500 group-hover:text-zinc-300'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l4-4 4 4m0 6l-4 4-4-4" /></svg>
+                    <svg className={`w-3.5 h-3.5 transition-transform ${isModelMenuOpen ? 'rotate-180 text-zinc-900' : 'text-zinc-400 group-hover:text-zinc-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l4-4 4 4m0 6l-4 4-4-4" /></svg>
                   </button>
 
                   {isModelMenuOpen && (
-                    <div className="absolute bottom-[calc(100%+16px)] left-0 w-[420px] max-h-[400px] bg-zinc-900 border border-zinc-800 rounded-2xl flex overflow-hidden shadow-2xl z-50 animate-in fade-in slide-in-from-bottom-2 duration-200">
-                      <div className="w-14 bg-zinc-950 border-r border-zinc-800/80 flex flex-col items-center py-3 gap-3">
+                    <div className="absolute bottom-[calc(100%+16px)] left-0 w-[420px] max-h-[400px] bg-white border border-zinc-200 rounded-2xl flex overflow-hidden shadow-2xl z-50 animate-in fade-in slide-in-from-bottom-2 duration-200">
+                      <div className="w-14 bg-zinc-50 border-r border-zinc-200 flex flex-col items-center py-3 gap-3">
                         {providers.map(p => (
                           <button
                             key={p}
@@ -1245,29 +1264,29 @@ export const ChatView: React.FC<ChatViewProps> = ({
                         ))}
                       </div>
 
-                      <div className="flex-1 flex flex-col bg-[#111111] min-w-0">
-                        <div className="p-3 border-b border-zinc-800/80 space-y-2.5">
+                      <div className="flex-1 flex flex-col bg-white min-w-0">
+                        <div className="p-3 border-b border-zinc-100 space-y-2.5">
                           <div className="flex items-center justify-between px-1">
-                            <span className="text-[13px] font-semibold text-white">Models</span>
-                            <button className="text-[10px] uppercase tracking-wider font-bold bg-blue-500/10 text-blue-400 px-2 py-1 rounded hover:bg-blue-500/20 transition-colors">
-                              Unlock All $8/mo
+                            <span className="text-[13px] font-semibold text-zinc-900">Models</span>
+                            <button className="text-[10px] uppercase tracking-wider font-bold bg-blue-50 text-blue-600 border border-blue-100 px-2 py-1 rounded-lg hover:bg-blue-100 transition-colors">
+                              Unlock All
                             </button>
                           </div>
                           <div className="relative flex items-center">
-                            <svg className="absolute left-3 w-4 h-4 text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                            <svg className="absolute left-3 w-4 h-4 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
                             <input
                               type="text"
                               value={modelSearchQuery}
                               onChange={(e) => setModelSearchQuery(e.target.value)}
                               placeholder="Search models..."
-                              className="w-full bg-zinc-900/50 border border-zinc-800 text-xs text-white rounded-lg py-2 pl-9 pr-3 focus:outline-none focus:border-zinc-700 focus:bg-zinc-900 transition-all"
+                              className="w-full bg-zinc-50 border border-zinc-200 text-xs text-zinc-900 rounded-lg py-2 pl-9 pr-3 focus:outline-none focus:border-zinc-300 focus:bg-white transition-all"
                             />
                           </div>
                         </div>
 
                         <div className="flex-1 overflow-y-auto p-2 space-y-0.5 custom-scrollbar">
                           {filteredModels.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center h-24 text-xs text-zinc-500">
+                            <div className="flex flex-col items-center justify-center h-24 text-xs text-zinc-400">
                               <p>No models found.</p>
                             </div>
                           ) : (
@@ -1278,24 +1297,24 @@ export const ChatView: React.FC<ChatViewProps> = ({
                                   onModelSelect(model.id);
                                   setIsModelMenuOpen(false);
                                 }}
-                                className="group flex flex-col p-2.5 rounded-xl hover:bg-zinc-800/50 cursor-pointer transition-colors"
+                                className="group flex flex-col p-2.5 rounded-xl hover:bg-zinc-50 cursor-pointer transition-colors"
                               >
                                 <div className="flex items-center justify-between">
                                   <div className="flex items-center gap-2">
-                                    <span className={`font-semibold text-[13px] ${selectedModel === model.id ? 'text-white' : 'text-zinc-300 group-hover:text-white'}`}>
+                                    <span className={`font-semibold text-[13px] ${selectedModel === model.id ? 'text-zinc-900' : 'text-zinc-600 group-hover:text-zinc-900'}`}>
                                       {model.name}
                                     </span>
                                     {model.isPremium && (
-                                      <div className="flex items-center gap-1 bg-blue-900/30 border border-blue-500/20 rounded text-blue-400 px-1 py-0.5">
+                                      <div className="flex items-center gap-1 bg-blue-50 border border-blue-100 rounded text-blue-600 px-1 py-0.5">
                                         <svg className="w-2.5 h-2.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L2 12L12 22L22 12L12 2Z" /></svg>
                                       </div>
                                     )}
                                     {selectedModel === model.id && (
-                                      <svg className="w-3.5 h-3.5 text-blue-400 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                                      <svg className="w-3.5 h-3.5 text-blue-600 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
                                     )}
                                   </div>
-                                  <div className="flex items-center gap-2 text-zinc-600 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <svg className="w-3.5 h-3.5 hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" title="Info"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                  <div className="flex items-center gap-2 text-zinc-300 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <svg className="w-3.5 h-3.5 hover:text-zinc-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" title="Info"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                                   </div>
                                 </div>
                                 <p className="text-[11px] text-zinc-500 mt-0.5 truncate pr-4">{model.description}</p>
@@ -1321,7 +1340,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
                   <button
                     type="submit"
                     disabled={(!input.trim() && files.length === 0)}
-                    className={`p-2 rounded-xl transition-all ${(!input.trim() && files.length === 0) ? 'text-zinc-600 cursor-not-allowed' : (isBranching ? 'text-blue-500 hover:text-blue-400' : 'text-zinc-200 hover:text-white')} hover:scale-[1.02] active:scale-[0.98]`}
+                    className={`p-2 rounded-xl transition-all ${(!input.trim() && files.length === 0) ? 'text-zinc-200 cursor-not-allowed' : (isBranching ? 'text-blue-500 hover:text-blue-600' : 'text-white bg-blue-600 hover:bg-blue-700')} hover:scale-[1.02] active:scale-[0.98]`}
                   >
                     <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" /></svg>
                   </button>

@@ -29,11 +29,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   if (loading) {
     return (
-      <div className="flex h-screen w-screen bg-[#020203] items-center justify-center">
+      <div className="flex h-screen w-screen bg-zinc-50 items-center justify-center">
         <div className="relative">
           <div className="w-16 h-16 rounded-full border-t-2 border-blue-500 animate-spin" />
-          <div className="absolute inset-0 m-auto w-8 h-8 bg-blue-500/20 rounded-full animate-pulse flex items-center justify-center">
-            <div className="w-2 h-2 bg-blue-500 rounded-full shadow-[0_0_10px_rgba(59,130,246,1)]" />
+          <div className="absolute inset-0 m-auto w-8 h-8 bg-blue-500/10 rounded-full animate-pulse flex items-center justify-center">
+            <div className="w-2 h-2 bg-blue-500 rounded-full" />
           </div>
         </div>
       </div>
@@ -51,7 +51,7 @@ const Auth: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   // 1. Add state for the name
-  const [fullName, setFullName] = useState(''); 
+  const [fullName, setFullName] = useState('');
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState<'signin' | 'signup'>('signup');
   const [message, setMessage] = useState('');
@@ -90,8 +90,8 @@ const Auth: React.FC = () => {
             });
 
           if (dbError) {
-             // Optional: Log this error, but don't block the user since Auth succeeded
-             console.error('Error saving user details:', dbError);
+            // Optional: Log this error, but don't block the user since Auth succeeded
+            console.error('Error saving user details:', dbError);
           }
         }
 
@@ -108,22 +108,22 @@ const Auth: React.FC = () => {
   };
 
   return (
-    <div className="flex h-screen w-screen bg-[#020203] items-center justify-center">
-      <div className="w-full max-w-md p-8 bg-[#050505] border border-zinc-900 rounded-2xl shadow-2xl">
+    <div className="flex h-screen w-screen bg-zinc-50 items-center justify-center">
+      <div className="w-full max-w-md p-8 bg-white border border-zinc-200 rounded-3xl shadow-xl">
         <div className="mb-8 text-center">
-          <div className="w-16 h-16 bg-zinc-900 border border-zinc-800 rounded-xl flex items-center justify-center shadow-2xl mx-auto mb-4">
-            <svg className="w-10 h-10 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="w-16 h-16 bg-zinc-50 border border-zinc-100 rounded-2xl flex items-center justify-center shadow-sm mx-auto mb-4">
+            <svg className="w-10 h-10 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
           </div>
-          <h1 className="text-2xl font-black tracking-[0.4em] uppercase text-white">LLM-Brancher</h1>
-          <p className="text-xs font-bold tracking-[0.2em] uppercase text-zinc-600 mt-2">
+          <h1 className="text-2xl font-bold tracking-tight text-zinc-900">LLM-Brancher</h1>
+          <p className="text-xs font-bold tracking-[0.2em] uppercase text-zinc-400 mt-2">
             Alpha Version
           </p>
         </div>
 
         <form onSubmit={handleAuth} className="space-y-4">
-          
+
           {/* 4. Render Name Input only in Signup mode */}
           {mode === 'signup' && (
             <div>
@@ -132,7 +132,7 @@ const Auth: React.FC = () => {
                 placeholder="Full Name"
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
-                className="w-full px-4 py-3 bg-zinc-900 border border-zinc-800 rounded-xl text-white placeholder-zinc-600 focus:outline-none focus:border-blue-500 transition-colors"
+                className="w-full px-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl text-zinc-900 placeholder-zinc-400 focus:outline-none focus:border-blue-500 focus:bg-white transition-all"
                 required
               />
             </div>
@@ -144,7 +144,7 @@ const Auth: React.FC = () => {
               placeholder="Email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-4 py-3 bg-zinc-900 border border-zinc-800 rounded-xl text-white placeholder-zinc-600 focus:outline-none focus:border-blue-500 transition-colors"
+              className="w-full px-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl text-zinc-900 placeholder-zinc-400 focus:outline-none focus:border-blue-500 focus:bg-white transition-all"
               required
             />
           </div>
@@ -154,7 +154,7 @@ const Auth: React.FC = () => {
               placeholder="Password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-3 bg-zinc-900 border border-zinc-800 rounded-xl text-white placeholder-zinc-600 focus:outline-none focus:border-blue-500 transition-colors"
+              className="w-full px-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl text-zinc-900 placeholder-zinc-400 focus:outline-none focus:border-blue-500 focus:bg-white transition-all"
               required
             />
           </div>
@@ -162,7 +162,7 @@ const Auth: React.FC = () => {
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-zinc-800 disabled:text-zinc-600 text-white font-bold rounded-xl transition-colors uppercase tracking-widest text-sm"
+            className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-zinc-100 disabled:text-zinc-400 text-white font-bold rounded-xl transition-all uppercase tracking-widest text-sm shadow-sm"
           >
             {loading ? 'Loading...' : mode === 'signin' ? 'Sign In' : 'Sign Up'}
           </button>
@@ -174,8 +174,8 @@ const Auth: React.FC = () => {
           <button
             type="button"
             onClick={() => {
-                setMode(mode === 'signin' ? 'signup' : 'signin');
-                setMessage(''); // Clear message on toggle
+              setMode(mode === 'signin' ? 'signup' : 'signin');
+              setMessage(''); // Clear message on toggle
             }}
             className="w-full text-xs text-zinc-500 hover:text-blue-500 transition-colors uppercase tracking-wider"
           >
