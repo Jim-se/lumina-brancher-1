@@ -4,11 +4,13 @@
  */
 
 const getApiUrl = () => {
-    // Check multiple locations for the API URL
+    // 1. Try standard Vite injection
+    // 2. Try process.env (forced injection from vite.config.ts)
+    // 3. Hardcoded fallback for your production environment if others fail
     const rawUrl =
-        (import.meta.env.VITE_API_URL) ||
-        (process?.env?.VITE_API_URL) ||
-        'http://localhost:3001';
+        import.meta.env.VITE_API_URL ||
+        (process as any).env?.VITE_API_URL ||
+        'https://klados-server-production.up.railway.app'; // <--- Hardcoded fallback
 
     // Remove any trailing slash to prevent double slashes in paths like //api/...
     const cleanUrl = rawUrl.endsWith('/') ? rawUrl.slice(0, -1) : rawUrl;
