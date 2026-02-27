@@ -939,17 +939,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
         <BranchGhostLabel x={cursor.x} y={cursor.y} />
       )}
 
-      <div
-        className="absolute top-0 h-full z-40 cursor-default"
-        style={{ left: 'calc(50% + 384px)', right: 0 }}
-        ref={zoneRef}
-        onMouseMove={handleMouseMove}
-        onMouseLeave={handleMouseLeave}
-        onMouseDown={handleZoneClick}
-        onWheel={e => {
-          if (scrollRef.current) scrollRef.current.scrollTop += e.deltaY;
-        }}
-      />
+      {/* Zone moved inside scroll container to prevent click blocking */}
 
       {activeBranch && (
         <BranchComposer
@@ -974,7 +964,19 @@ export const ChatView: React.FC<ChatViewProps> = ({
       )}
 
       <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto custom-scrollbar relative z-10">
-        <div className="relative w-full" ref={contentRef}>
+        <div className="relative w-full min-h-full" ref={contentRef}>
+          {/* Branching Zone — rendered inside scroll content so it doesn't block mini-chats */}
+          <div
+            className="absolute top-0 h-full z-0 cursor-default"
+            style={{ left: 'calc(50% + 384px)', right: 0 }}
+            ref={zoneRef}
+            onMouseMove={handleMouseMove}
+            onMouseLeave={handleMouseLeave}
+            onMouseDown={handleZoneClick}
+            onWheel={e => {
+              if (scrollRef.current) scrollRef.current.scrollTop += e.deltaY;
+            }}
+          />
           <div className="max-w-3xl mx-auto px-6 pt-8 pb-12 space-y-8">
             {allMessages.map(({ msg, nodeId }, idx) => {
               const uniqueMsgId = `${nodeId}-${idx}`;
