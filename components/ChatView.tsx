@@ -625,7 +625,7 @@ const BranchMiniChat: React.FC<BranchMiniChatProps> = ({
 
       {/* Mini chat panel — pointer-events-auto so it captures mouse fully */}
       <div
-        className="pointer-events-auto absolute flex flex-col bg-white border border-zinc-200 rounded-2xl shadow-xl overflow-hidden transition-all duration-200"
+        className="pointer-events-auto absolute flex flex-col bg-[var(--card-bg)] border border-[var(--border-color)] rounded-2xl shadow-xl overflow-hidden transition-all duration-200"
         style={{
           top: panelTop - pos.top,
           left: 0,
@@ -635,9 +635,9 @@ const BranchMiniChat: React.FC<BranchMiniChatProps> = ({
         onWheel={e => e.stopPropagation()} // keep scroll inside the mini chat
       >
         {/* Header */}
-        <div className="flex items-center gap-2 px-2.5 py-1.5 border-b border-zinc-100 bg-zinc-50 shrink-0">
+        <div className="flex items-center gap-2 px-2.5 py-1.5 border-b border-[var(--border-color)] bg-[var(--sidebar-bg)] shrink-0">
           <div className="w-1.5 h-1.5 bg-blue-500 rounded-full shrink-0" />
-          <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-600 truncate flex-1 min-w-0">
+          <span className="text-[10px] font-bold uppercase tracking-widest text-[var(--app-text-muted)] truncate flex-1 min-w-0">
             {displayTitle}
           </span>
           {isGeneratingThisNode && (
@@ -648,14 +648,14 @@ const BranchMiniChat: React.FC<BranchMiniChatProps> = ({
           )}
           {onGoToNode && (
             <button type="button" onClick={onGoToNode} title="Go to branch"
-              className="p-0.5 text-zinc-600 hover:text-blue-400 transition-colors shrink-0">
+              className="p-0.5 text-[var(--app-text-muted)] hover:text-blue-400 transition-colors shrink-0">
               <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
               </svg>
             </button>
           )}
           <button type="button" onClick={() => setCollapsed(c => !c)} title={collapsed ? 'Expand' : 'Collapse'}
-            className="p-0.5 text-zinc-600 hover:text-zinc-300 transition-colors shrink-0">
+            className="p-0.5 text-[var(--app-text-muted)] hover:text-zinc-300 transition-colors shrink-0">
             <svg className={`w-3 h-3 transition-transform duration-200 ${collapsed ? 'rotate-180' : ''}`}
               fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -667,11 +667,11 @@ const BranchMiniChat: React.FC<BranchMiniChatProps> = ({
           <>
             <div className="flex-1 overflow-y-auto px-3 py-2 space-y-2 custom-scrollbar text-[11px]">
               {messages.length === 0 && !isGeneratingThisNode && (
-                <div className="flex items-center justify-center h-full text-zinc-600 text-center">No messages yet</div>
+                <div className="flex items-center justify-center h-full text-[var(--app-text-muted)] text-center">No messages yet</div>
               )}
               {messages.map((msg, i) => (
                 <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-[92%] px-2.5 py-1.5 rounded-xl leading-relaxed ${msg.role === 'user' ? 'bg-[#f4f4f4] border border-zinc-200 text-zinc-900 rounded-tr-none text-[11px]' : 'bg-transparent pl-0'
+                  <div className={`max-w-[92%] px-2.5 py-1.5 rounded-xl leading-relaxed ${msg.role === 'user' ? 'bg-[var(--msg-user)] border border-[var(--border-color)] text-[var(--app-text)] rounded-tr-none text-[11px]' : 'bg-transparent text-[var(--app-text)] pl-0'
                     }`}>
                     {msg.role === 'user' ? msg.content : (
                       msg.content
@@ -688,7 +688,7 @@ const BranchMiniChat: React.FC<BranchMiniChatProps> = ({
               )}
               <div ref={messagesEndRef} />
             </div>
-            <div className="shrink-0 border-t border-zinc-100 px-2 py-1.5 flex items-center gap-1.5 bg-white">
+            <div className="shrink-0 border-t border-[var(--border-color)] px-2 py-1.5 flex items-center gap-1.5 bg-[var(--card-bg)]">
               <input
                 type="text"
                 value={input}
@@ -698,7 +698,7 @@ const BranchMiniChat: React.FC<BranchMiniChatProps> = ({
                 }}
                 placeholder="Continue branch…"
                 disabled={isGeneratingThisNode}
-                className="flex-1 bg-transparent text-[11px] text-zinc-900 placeholder:text-zinc-400 outline-none border-none min-w-0 disabled:opacity-50"
+                className="flex-1 bg-transparent text-[11px] text-[var(--app-text)] placeholder:text-[var(--app-text-muted)] outline-none border-none min-w-0 disabled:opacity-50"
               />
               {isGeneratingThisNode ? (
                 <button type="button" onClick={onStopGeneration} title="Stop generating"
@@ -1164,7 +1164,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
         </div>
       </div>
 
-      <div className="w-full bg-gradient-to-t from-white via-white/80 to-transparent pb-10 pt-6 z-20">
+      <div className="w-full pb-10 pt-6 z-20" style={{ background: 'linear-gradient(to top, var(--app-bg) 20%, transparent 100%)' }}>
         <div className="max-w-3xl mx-auto px-6">
           {isBranching && (
             <div className="flex items-center justify-between px-6 py-2.5 bg-blue-50 border border-blue-100 text-blue-600 rounded-t-2xl mb-[-1px] mx-2 animate-in slide-in-from-bottom-2">
@@ -1178,7 +1178,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
             </div>
           )}
 
-          <div className={`flex flex-col gap-0 bg-white border rounded-[2rem] p-0.5 transition-all shadow-sm ${isBranching ? 'border-blue-500/50 rounded-t-none ring-2 ring-blue-500/5' : 'border-zinc-200 focus-within:border-zinc-300 focus-within:shadow-md'}`}>
+          <div className={`flex flex-col gap-0 bg-[var(--card-bg)] border rounded-[2rem] p-0.5 transition-all shadow-sm ${isBranching ? 'border-blue-500/50 rounded-t-none ring-2 ring-blue-500/5' : 'border-[var(--border-color)] focus-within:border-zinc-400 focus-within:shadow-md'}`}>
 
             {files.length > 0 && (
               <div className="w-full flex gap-2 px-4 pt-4 overflow-x-auto custom-scrollbar">
@@ -1218,7 +1218,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
                   }
                 }}
                 placeholder={isBranching ? "What should this branch do?" : "Message Klados..."}
-                className="w-full bg-transparent border-none px-2 py-2 text-base font-medium focus:outline-none placeholder:text-zinc-400 text-zinc-900 resize-none overflow-y-auto custom-scrollbar min-h-[44px]"
+                className="w-full bg-transparent border-none px-2 py-2 text-base font-medium focus:outline-none placeholder:text-[var(--app-text-muted)] text-[var(--app-text)] resize-none overflow-y-auto custom-scrollbar min-h-[44px]"
                 style={{ minHeight: '44px', maxHeight: '200px', height: 'auto' }}
                 rows={1}
                 onInput={(e) => {
@@ -1252,8 +1252,8 @@ export const ChatView: React.FC<ChatViewProps> = ({
                   </button>
 
                   {isModelMenuOpen && (
-                    <div className="absolute bottom-[calc(100%+16px)] left-0 w-[420px] max-h-[400px] bg-white border border-zinc-200 rounded-2xl flex overflow-hidden shadow-2xl z-50 animate-in fade-in slide-in-from-bottom-2 duration-200">
-                      <div className="w-14 bg-zinc-50 border-r border-zinc-200 flex flex-col items-center py-3 gap-3">
+                    <div className="absolute bottom-[calc(100%+16px)] left-0 w-[420px] max-h-[400px] bg-[var(--card-bg)] border border-[var(--border-color)] rounded-2xl flex overflow-hidden shadow-2xl z-50 animate-in fade-in slide-in-from-bottom-2 duration-200">
+                      <div className="w-14 bg-[var(--sidebar-bg)] border-r border-[var(--border-color)] flex flex-col items-center py-3 gap-3">
                         {providers.map(p => (
                           <button
                             key={p}
@@ -1267,10 +1267,10 @@ export const ChatView: React.FC<ChatViewProps> = ({
                         ))}
                       </div>
 
-                      <div className="flex-1 flex flex-col bg-white min-w-0">
-                        <div className="p-3 border-b border-zinc-100 space-y-2.5">
+                      <div className="flex-1 flex flex-col bg-[var(--card-bg)] min-w-0">
+                        <div className="p-3 border-b border-[var(--border-color)] space-y-2.5">
                           <div className="flex items-center justify-between px-1">
-                            <span className="text-[13px] font-semibold text-zinc-900">Models</span>
+                            <span className="text-[13px] font-semibold text-[var(--app-text)]">Models</span>
                             <button className="text-[10px] uppercase tracking-wider font-bold bg-blue-50 text-blue-600 border border-blue-100 px-2 py-1 rounded-lg hover:bg-blue-100 transition-colors">
                               Unlock All
                             </button>
@@ -1282,7 +1282,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
                               value={modelSearchQuery}
                               onChange={(e) => setModelSearchQuery(e.target.value)}
                               placeholder="Search models..."
-                              className="w-full bg-zinc-50 border border-zinc-200 text-xs text-zinc-900 rounded-lg py-2 pl-9 pr-3 focus:outline-none focus:border-zinc-300 focus:bg-white transition-all"
+                              className="w-full bg-[var(--sidebar-bg)] border border-[var(--border-color)] text-xs text-[var(--app-text)] rounded-lg py-2 pl-9 pr-3 focus:outline-none transition-all"
                             />
                           </div>
                         </div>
@@ -1300,11 +1300,11 @@ export const ChatView: React.FC<ChatViewProps> = ({
                                   onModelSelect(model.id);
                                   setIsModelMenuOpen(false);
                                 }}
-                                className="group flex flex-col p-2.5 rounded-xl hover:bg-zinc-50 cursor-pointer transition-colors"
+                                className="group flex flex-col p-2.5 rounded-xl hover:bg-[var(--msg-user)] cursor-pointer transition-colors"
                               >
                                 <div className="flex items-center justify-between">
                                   <div className="flex items-center gap-2">
-                                    <span className={`font-semibold text-[13px] ${selectedModel === model.id ? 'text-zinc-900' : 'text-zinc-600 group-hover:text-zinc-900'}`}>
+                                    <span className={`font-semibold text-[13px] ${selectedModel === model.id ? 'text-[var(--app-text)]' : 'text-[var(--app-text-muted)] group-hover:text-[var(--app-text)]'}`}>
                                       {model.name}
                                     </span>
                                     {model.isPremium && (
@@ -1317,10 +1317,10 @@ export const ChatView: React.FC<ChatViewProps> = ({
                                     )}
                                   </div>
                                   <div className="flex items-center gap-2 text-zinc-300 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <svg className="w-3.5 h-3.5 hover:text-zinc-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" title="Info"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                    <svg className="w-3.5 h-3.5 hover:text-zinc-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><title>Info</title><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                                   </div>
                                 </div>
-                                <p className="text-[11px] text-zinc-500 mt-0.5 truncate pr-4">{model.description}</p>
+                                <p className="text-[11px] text-[var(--app-text-muted)] mt-0.5 truncate pr-4">{model.description}</p>
                               </div>
                             ))
                           )}

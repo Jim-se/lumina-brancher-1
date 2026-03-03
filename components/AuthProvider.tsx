@@ -90,6 +90,13 @@ const Auth: React.FC = () => {
 
         if (error) throw error;
 
+        // Check if user actually got created
+        if (data.user?.identities && data.user.identities.length === 0) {
+          setMessage('Email already exists. Please sign in instead.');
+          setLoading(false);
+          return;
+        }
+
         // 3. Handle the public.users table safely
         if (data.user) {
           // We use UPSERT instead of INSERT.
@@ -121,16 +128,16 @@ const Auth: React.FC = () => {
   };
 
   return (
-    <div className="flex h-screen w-screen bg-zinc-50 items-center justify-center">
-      <div className="w-full max-w-md p-8 bg-white border border-zinc-200 rounded-3xl shadow-xl">
+    <div className="flex h-screen w-screen bg-[var(--app-bg)] items-center justify-center">
+      <div className="w-full max-w-md p-8 bg-[var(--card-bg)] border border-[var(--border-color)] rounded-3xl shadow-xl">
         <div className="mb-8 text-center">
-          <div className="w-16 h-16 bg-zinc-50 border border-zinc-100 rounded-2xl flex items-center justify-center shadow-sm mx-auto mb-4">
-            <svg className="w-10 h-10 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="w-16 h-16 bg-[var(--sidebar-bg)] border border-[var(--border-color)] rounded-2xl flex items-center justify-center shadow-sm mx-auto mb-4">
+            <svg className="w-10 h-10 text-[var(--accent-color)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
           </div>
-          <h1 className="text-2xl font-bold tracking-tight text-zinc-900">Klados-AI</h1>
-          <p className="text-xs font-bold tracking-[0.2em] uppercase text-zinc-400 mt-2">
+          <h1 className="text-2xl font-bold tracking-tight text-[var(--app-text)]">Klados-AI</h1>
+          <p className="text-xs font-bold tracking-[0.2em] uppercase text-[var(--app-text-muted)] mt-2">
             Alpha Version
           </p>
         </div>
@@ -145,7 +152,7 @@ const Auth: React.FC = () => {
                 placeholder="Full Name"
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
-                className="w-full px-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl text-zinc-900 placeholder-zinc-400 focus:outline-none focus:border-blue-500 focus:bg-white transition-all"
+                className="w-full px-4 py-3 bg-[var(--sidebar-bg)] border border-[var(--border-color)] rounded-xl text-[var(--app-text)] placeholder-[var(--app-text-muted)] focus:outline-none focus:border-[var(--accent-color)] focus:bg-[var(--card-bg)] transition-all"
                 required
               />
             </div>
@@ -157,7 +164,7 @@ const Auth: React.FC = () => {
               placeholder="Email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl text-zinc-900 placeholder-zinc-400 focus:outline-none focus:border-blue-500 focus:bg-white transition-all"
+              className="w-full px-4 py-3 bg-[var(--sidebar-bg)] border border-[var(--border-color)] rounded-xl text-[var(--app-text)] placeholder-[var(--app-text-muted)] focus:outline-none focus:border-[var(--accent-color)] focus:bg-[var(--card-bg)] transition-all"
               required
             />
           </div>
@@ -167,7 +174,7 @@ const Auth: React.FC = () => {
               placeholder="Password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl text-zinc-900 placeholder-zinc-400 focus:outline-none focus:border-blue-500 focus:bg-white transition-all"
+              className="w-full px-4 py-3 bg-[var(--sidebar-bg)] border border-[var(--border-color)] rounded-xl text-[var(--app-text)] placeholder-[var(--app-text-muted)] focus:outline-none focus:border-[var(--accent-color)] focus:bg-[var(--card-bg)] transition-all"
               required
             />
           </div>
@@ -175,13 +182,13 @@ const Auth: React.FC = () => {
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-zinc-100 disabled:text-zinc-400 text-white font-bold rounded-xl transition-all uppercase tracking-widest text-sm shadow-sm"
+            className="w-full py-3 bg-[var(--accent-color)] hover:bg-[var(--accent-hover)] disabled:bg-[var(--sidebar-bg)] disabled:text-[var(--app-text-muted)] text-white font-bold rounded-xl transition-all uppercase tracking-widest text-sm shadow-sm"
           >
             {loading ? 'Loading...' : mode === 'signin' ? 'Sign In' : 'Sign Up'}
           </button>
 
           {message && (
-            <p className="text-xs text-center text-zinc-400">{message}</p>
+            <p className="text-xs text-center text-[var(--app-text-muted)]">{message}</p>
           )}
 
           <button
@@ -190,7 +197,7 @@ const Auth: React.FC = () => {
               setMode(mode === 'signin' ? 'signup' : 'signin');
               setMessage(''); // Clear message on toggle
             }}
-            className="w-full text-xs text-zinc-500 hover:text-blue-500 transition-colors uppercase tracking-wider"
+            className="w-full text-xs text-[var(--app-text-muted)] hover:text-[var(--accent-color)] transition-colors uppercase tracking-wider"
           >
             {mode === 'signin' ? 'Need an account? Sign up' : 'Have an account? Sign in'}
           </button>

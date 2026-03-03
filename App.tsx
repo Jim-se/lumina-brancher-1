@@ -723,7 +723,7 @@ const App: React.FC = () => {
             <aside
               className={`
                 relative flex flex-col bg-[var(--sidebar-bg)] border-r border-[var(--sidebar-border)] transition-all duration-[450ms] ease-[cubic-bezier(0.2,0.8,0.2,1)] z-[200]
-                ${sidebarCollapsed ? 'w-0 opacity-0 pointer-events-none' : 'w-72 opacity-100'}
+                ${sidebarCollapsed ? 'w-16' : 'w-72 opacity-100'}
               `}
             >
               {/* LOGO + COLLAPSE TOGGLE */}
