@@ -5,6 +5,7 @@ import { API_BASE_URL } from './frontendConfig';
 // Or we can just use a proxy.
 
 let realClient: any = null;
+let initPromise: Promise<any> | null = null;
 
 const handler = {
     get: (target: any, prop: string) => {
@@ -25,16 +26,26 @@ export const supabase = new Proxy({}, handler);
 
 export const initSupabase = async () => {
     if (realClient) return realClient;
+    if (initPromise) return initPromise;
 
-    // Hardcode the public anon key for auth only if needed, 
-    // but the most secure way is to keep it out of the bundle.
-    // For now, we will still fetch the PUBLIC ANON key from the server
-    // so that the frontend can handle user sessions.
+    initPromise = (async () => {
+        try {
+            const res = await fetch(`${API_BASE_URL}/api/config/supabase`);
+            if (!res.ok) throw new Error("Failed to fetch Supabase config");
+            const { url, key } = await res.json();
 
-    // NOTE: We are NOT using the service_role key here.
-    const res = await fetch(`${API_BASE_URL}/api/config/supabase`);
-    const { url, key } = await res.json();
+            if (!url || !key) {
+                console.error("Supabase config is missing url or key");
+                throw new Error("Invalid Supabase config");
+            }
 
-    realClient = createClient(url, key);
-    return realClient;
+            realClient = createClient(url, key);
+            return realClient;
+        } catch (err) {
+            initPromise = null; // Allow retry on failure
+            throw err;
+        }
+    })();
+
+    return initPromise;
 };

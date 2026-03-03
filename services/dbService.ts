@@ -27,21 +27,38 @@ export const dbService = {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return null;
 
-    // We can still use supabase.from('users') if we have RLS setup correctly,
-    // but to be "Ultra Secure", let's assume we want to proxy this too if it contains sensitive data.
-    // However, user profile is simple, so we keep the direct logic if safe.
-    // For this refactor, let's keep it simple and just return the user mapping.
-
-    // Check if we want to proxy this too... let's do it for consistency.
     try {
-      const res = await supabase.from('users').select('full_name').eq('id', user.id).single();
+      // Use maybeSingle() to avoid 406 errors if row is missing
+      const { data, error } = await supabase
+        .from('users')
+        .select('full_name')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      if (error) {
+        console.warn('[DB] User profile fetch encountered error:', error.message);
+      }
+
+      // If missing, try to "onboard" from metadata
+      let fullName = data?.full_name || null;
+      if (!fullName && user.user_metadata?.full_name) {
+        fullName = user.user_metadata.full_name;
+        // Optionally upsert back to DB so it exists for next time
+        await supabase.from('users').upsert({ id: user.id, full_name: fullName }).select().maybeSingle();
+      }
+
       return {
-        fullName: res.data?.full_name || null,
+        fullName: fullName,
         email: user.email,
         createdAt: user.created_at
       };
-    } catch (e) {
-      return { fullName: null, email: user.email, createdAt: user.created_at };
+    } catch (e: any) {
+      console.error('[DB] Profile hydration failed:', e.message);
+      return {
+        fullName: user.user_metadata?.full_name || null,
+        email: user.email,
+        createdAt: user.created_at
+      };
     }
   },
 

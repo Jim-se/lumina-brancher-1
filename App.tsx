@@ -730,10 +730,8 @@ const App: React.FC = () => {
               <div className="flex items-center gap-4 pointer-events-auto pt-10 px-4 mb-4 justify-between">
                 {!sidebarCollapsed && (
                   <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 bg-[var(--card-bg)] border border-[var(--border-color)] rounded-xl flex items-center justify-center shadow-sm shrink-0">
-                      <svg className="w-6 h-6 text-[var(--accent-color)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                      </svg>
+                    <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-sm shrink-0 overflow-hidden border border-[var(--border-color)]">
+                      <img src="/logo.png" alt="Klados Logo" className="w-full h-full object-contain" />
                     </div>
                     <div>
                       <h1 className="text-[13px] font-bold tracking-tight uppercase text-[var(--app-text)]">Klados-AI</h1>
@@ -742,10 +740,8 @@ const App: React.FC = () => {
                   </div>
                 )}
                 {sidebarCollapsed && (
-                  <div className="w-10 h-10 bg-[var(--card-bg)] border border-[var(--border-color)] rounded-xl flex items-center justify-center shadow-sm mx-auto">
-                    <svg className="w-6 h-6 text-[var(--accent-color)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                    </svg>
+                  <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-sm mx-auto overflow-hidden border border-[var(--border-color)]">
+                    <img src="/logo.png" alt="Klados Logo" className="w-full h-full object-contain" />
                   </div>
                 )}
                 {!sidebarCollapsed && (
