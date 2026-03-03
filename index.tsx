@@ -5,6 +5,7 @@ import { BrowserRouter } from 'react-router-dom';
 import App from './App';
 import { AuthProvider } from './components/AuthProvider';
 import { ThemeProvider } from './src/contexts/ThemeContext';
+import './src/index.css';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {

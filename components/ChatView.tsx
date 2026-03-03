@@ -4,6 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneLight, vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { useTheme } from '../src/contexts/ThemeContext';
+import DOMPurify from 'dompurify';
 export interface BranchMetadata {
   messageId: string;
   blockId: string;
@@ -539,7 +540,7 @@ const MiniMarkdown: React.FC<{ content: string }> = ({ content }) => {
         a: ({ node, ...props }) => <a className="text-[var(--accent-color)] hover:opacity-80 underline" target="_blank" rel="noopener noreferrer" {...props} />,
       }}
     >
-      {content}
+      {DOMPurify.sanitize(content)}
     </ReactMarkdown>
   );
 };
@@ -1054,7 +1055,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
                           a: ({ node, ...props }) => <a className="text-[var(--accent-color)] hover:opacity-80 underline" target="_blank" rel="noopener noreferrer" {...props} />,
                           blockquote: ({ node, ...props }) => <blockquote className="border-l-4 border-[var(--border-color)] pl-4 italic text-[var(--app-text-muted)] my-4" {...props} />,
                         }}>
-                          {msg.content}
+                          {DOMPurify.sanitize(msg.content)}
                         </ReactMarkdown>
                       </div>
                     </div>

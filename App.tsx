@@ -186,7 +186,7 @@ const App: React.FC = () => {
   };
 
   const handleReportBug = async () => {
-    const description = prompt("Describe the bug (what happened?):");
+    let description = prompt("Describe the bug (what happened?):");
     if (!description) return;
 
     try {

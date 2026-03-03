@@ -13,6 +13,7 @@
     "@openrouter/sdk": "^0.8.0",
     "@supabase/supabase-js": "^2.91.1",
     "@types/react-syntax-highlighter": "^15.5.13",
+    "dompurify": "^3.3.1",
     "openai": "^6.17.0",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
@@ -22,8 +23,13 @@
     "reactflow": "11.11.4"
   },
   "devDependencies": {
+    "@tailwindcss/vite": "^4.2.1",
+    "@types/dompurify": "^3.0.5",
     "@types/node": "^22.14.0",
     "@vitejs/plugin-react": "^5.0.0",
+    "autoprefixer": "^10.4.27",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^4.2.1",
     "typescript": "~5.8.2",
     "vite": "^6.2.0"
   }
