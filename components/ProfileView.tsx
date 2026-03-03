@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabaseClient';
 
 export const goPro = () => {
-    window.location.href = "https://buy.stripe.com/test_00wcN5bYu8Ky3TH0qLgA800";
+    window.location.href = "https://buy.stripe.com/00w9AVbsA88M9438lC1Nu01";
 };
 
 export const handleLogout = async () => {
