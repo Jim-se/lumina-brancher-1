@@ -20,6 +20,7 @@ const getMimeType = (file: File): string => {
 
 
 import { API_BASE_URL } from './frontendConfig';
+import { supabase } from './supabaseClient';
 
 export const generateResponse = async (
   prompt: string,
@@ -29,9 +30,15 @@ export const generateResponse = async (
   isMock: boolean = false
 ) => {
   try {
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token;
+
     const response = await fetch(`${API_BASE_URL}/api/gemini/generate`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`
+      },
       body: JSON.stringify({ model: modelId, prompt, history, files: [] }) // Simplified files for now
     });
 
@@ -56,9 +63,15 @@ export const generateResponse = async (
 
 export const generateTitle = async (prompt: string, response: string, isMock: boolean = false) => {
   try {
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token;
+
     const res = await fetch(`${API_BASE_URL}/api/gemini/generate`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`
+      },
       body: JSON.stringify({
         model: "gemini-1.5-flash",
         prompt: `Generate a short, descriptive title (2-6 words) for this conversation. Do not use quotes or special characters.\n\nUser: "${prompt}"\nAI: "${response.substring(0, 150)}..."\n\nTitle:`

@@ -22,6 +22,7 @@ const isImageFile = (file: File): boolean => {
 // --- Main Service Functions ---
 
 import { API_BASE_URL } from './frontendConfig';
+import { supabase } from './supabaseClient';
 
 export const generateResponse = async (
   prompt: string,
@@ -58,9 +59,15 @@ export const generateResponse = async (
 
     messages.push({ role: 'user', content: userContent });
 
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token;
+
     const response = await fetch(`${API_BASE_URL}/api/openrouter/chat`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
       body: JSON.stringify({ model: modelId, messages, stream: true }),
     });
 
@@ -118,9 +125,15 @@ export const generateTitle = async (
       { role: "user", content: `User: ${userMessage.slice(0, 200)}\nAI: ${aiResponse.slice(0, 200)}` }
     ];
 
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token;
+
     const response = await fetch(`${API_BASE_URL}/api/openrouter/chat`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`
+      },
       body: JSON.stringify({ model: modelName, messages })
     });
 

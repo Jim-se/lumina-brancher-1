@@ -28,6 +28,7 @@ const isPdfFile = (file: File): boolean => {
 };
 
 import { API_BASE_URL } from './frontendConfig';
+import { supabase } from './supabaseClient';
 
 export const generateResponseOpenAI = async (
   prompt: string,
@@ -63,9 +64,15 @@ export const generateResponseOpenAI = async (
 
     messages.push({ role: 'user', content: userContent });
 
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token;
+
     const response = await fetch(`${API_BASE_URL}/api/openai/chat`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`
+      },
       body: JSON.stringify({ model: modelId, messages, stream: true })
     });
 
