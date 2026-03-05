@@ -84,9 +84,6 @@ body {
     background-color: var(--app-bg);
     color: var(--app-text);
     overflow: hidden;
-    transition: background-color 0.4s cubic-bezier(0.4, 0, 0.2, 1),
-        color 0.4s cubic-bezier(0.4, 0, 0.2, 1),
-        border-color 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .custom-scrollbar::-webkit-scrollbar {
@@ -176,4 +173,21 @@ body {
 
 .fade-in {
     opacity: 0;
+}
+
+.sidebar-button-entrance {
+    animation: sidebar-button-pop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+    animation-delay: 450ms;
+}
+
+@keyframes sidebar-button-pop {
+    0% {
+        transform: scale(0.5);
+        opacity: 0;
+    }
+
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
 }

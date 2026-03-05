@@ -79,7 +79,7 @@ const BranchComposer: React.FC<BranchComposerProps & { composerRef: React.RefObj
   const inputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => { inputRef.current?.focus(); }, []);
+  useEffect(() => { inputRef.current?.focus({ preventScroll: true }); }, []);
 
   const handleSend = useCallback(() => {
     if (text.trim() || files.length > 0) {
@@ -103,110 +103,131 @@ const BranchComposer: React.FC<BranchComposerProps & { composerRef: React.RefObj
   return (
     <div
       ref={composerRef}
-      className="branch-composer-ui absolute z-[60] bg-[var(--card-bg)] border border-[var(--border-color)] rounded-xl shadow-[0_20px_50px_rgba(0,0,0,0.15)] flex flex-col p-1.5 animate-in fade-in zoom-in-95 duration-150 transition-all"
+      className="branch-composer-ui absolute z-[60] pointer-events-none"
       style={{
-        top: anchorY - 24,
+        top: anchorY,
         left: 'calc(50% + 384px + 12px)',
         width: 300,
       }}
-      onMouseDown={(e) => e.stopPropagation()}
     >
-      <input type="file" multiple ref={fileInputRef} className="hidden" onChange={handleFileSelect} />
-
-      {/* File Previews */}
-      {files.length > 0 && (
-        <div className="flex gap-2 pb-2 px-1 overflow-x-auto custom-scrollbar">
-          {files.map((file, i) => (
-            <div key={i} className="flex items-center gap-1.5 bg-[var(--sidebar-bg)] rounded-lg px-2 py-1 text-[10px] text-[var(--app-text-muted)] border border-[var(--border-color)] shrink-0">
-              <span className="truncate max-w-[100px]">{file.name}</span>
-              <button type="button" onClick={() => removeFile(i)} className="hover:text-red-500 transition-colors">✕</button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Top Row: Input & Actions */}
-      <div className="flex items-center gap-1">
-        <button type="button" onClick={onClose} title="Cancel (Esc)" className="p-1 text-[var(--app-text-muted)] hover:text-[var(--app-text)] transition-colors rounded shrink-0">
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-        </button>
-
-        <input
-          ref={inputRef}
-          type="text"
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') handleSend();
-            if (e.key === 'Escape') onClose();
-          }}
-          placeholder="Type a branch prompt…"
-          className="flex-1 bg-transparent border-none text-sm text-[var(--app-text)] placeholder:text-[var(--app-text-muted)] focus:ring-0 outline-none px-1 min-w-0"
-        />
-
-        <button
-          type="button"
-          onClick={() => setIsExpanded(!isExpanded)}
-          title="Toggle Options"
-          className={`p-1 transition-colors rounded shrink-0 ${isExpanded ? 'text-[var(--app-text)] bg-[var(--sidebar-bg)]' : 'text-[var(--app-text-muted)] hover:text-[var(--app-text)]'}`}
-        >
-          <svg className={`w-3.5 h-3.5 transition-transform duration-200 ${isExpanded ? 'rotate-180' : 'rotate-0'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-          </svg>
-        </button>
-
-        <button
-          type="button"
-          onClick={handleSend}
-          disabled={!text.trim() && files.length === 0}
-          className="bg-[var(--accent-color)] hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed text-white p-1.5 rounded-lg transition-all shrink-0"
-        >
-          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" /></svg>
-        </button>
+      {/* Blue connecting line — from left edge back to the message bubble */}
+      <div
+        className="pointer-events-none absolute top-[1px] h-[2px] bg-blue-400 shadow-[0_0_10px_2px_rgba(59,130,246,0.7)]"
+        style={{ width: 48, left: -48 }}
+      >
+        <div className="absolute left-0 top-[-2px] w-1.5 h-1.5 bg-blue-100 rounded-full shadow-[0_0_8px_2px_rgba(255,255,255,0.8)]" />
+        <div className="absolute right-0 top-[-2px] w-1.5 h-1.5 bg-blue-400 rounded-full" />
       </div>
 
-      {/* Expanded Bottom Row: File & Model Options */}
-      {isExpanded && (
-        <div className="flex items-center gap-2 pt-2 pb-0.5 px-1 mt-1 border-t border-[var(--border-color)] animate-in slide-in-from-top-2 fade-in duration-200">
+      <div
+        className="pointer-events-auto bg-[var(--card-bg)] border border-[var(--border-color)] rounded-xl shadow-[0_20px_50px_rgba(0,0,0,0.15)] flex flex-col p-1.5 animate-in fade-in zoom-in-95 duration-150 transition-all text-left relative overflow-hidden"
+        style={{
+          position: 'absolute',
+          top: -24,
+          left: 0,
+          width: '100%'
+        }}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        {/* Vertical connection line backdrop - similar to expanded mini chat */}
+        <div className="absolute left-4 top-0 bottom-0 w-px bg-zinc-100/50 z-0" />
+        <input type="file" multiple ref={fileInputRef} className="hidden" onChange={handleFileSelect} />
+
+        {/* File Previews */}
+        {files.length > 0 && (
+          <div className="flex gap-2 pb-2 px-1 overflow-x-auto custom-scrollbar relative z-10">
+            {files.map((file, i) => (
+              <div key={i} className="flex items-center gap-1.5 bg-[var(--sidebar-bg)] rounded-lg px-2 py-1 text-[10px] text-[var(--app-text-muted)] border border-[var(--border-color)] shrink-0">
+                <span className="truncate max-w-[100px]">{file.name}</span>
+                <button type="button" onClick={() => removeFile(i)} className="hover:text-red-500 transition-colors">✕</button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Top Row: Input & Actions */}
+        <div className="flex items-center gap-1 relative z-10">
+          <button type="button" onClick={onClose} title="Cancel (Esc)" className="p-1 text-[var(--app-text-muted)] hover:text-[var(--app-text)] transition-colors rounded shrink-0">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
+
+          <input
+            ref={inputRef}
+            type="text"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleSend();
+              if (e.key === 'Escape') onClose();
+            }}
+            placeholder="Type a branch prompt…"
+            className="flex-1 bg-transparent border-none text-sm text-[var(--app-text)] placeholder:text-[var(--app-text-muted)] focus:ring-0 outline-none px-1 min-w-0"
+          />
+
           <button
             type="button"
-            onClick={() => fileInputRef.current?.click()}
-            title="Attach files"
-            className="p-1.5 text-[var(--app-text-muted)] hover:text-[var(--accent-color)] rounded-full transition-all hover:bg-[var(--sidebar-bg)]"
+            onClick={() => setIsExpanded(!isExpanded)}
+            title="Toggle Options"
+            className={`p-1 transition-colors rounded shrink-0 ${isExpanded ? 'text-[var(--app-text)] bg-[var(--sidebar-bg)]' : 'text-[var(--app-text-muted)] hover:text-[var(--app-text)]'}`}
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+            <svg className={`w-3.5 h-3.5 transition-transform duration-200 ${isExpanded ? 'rotate-180' : 'rotate-0'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
             </svg>
           </button>
 
-          <div className="relative">
+          <button
+            type="button"
+            onClick={handleSend}
+            disabled={!text.trim() && files.length === 0}
+            className="bg-blue-600 hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed text-white p-1.5 rounded-lg transition-all shrink-0"
+          >
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" /></svg>
+          </button>
+        </div>
+
+        {/* Expanded Bottom Row: File & Model Options */}
+        {isExpanded && (
+          <div className="flex items-center gap-2 pt-2 pb-0.5 px-1 mt-1 border-t border-[var(--border-color)] animate-in slide-in-from-top-2 fade-in duration-200">
             <button
               type="button"
-              onClick={() => setIsModelMenuOpen(!isModelMenuOpen)}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold text-[var(--app-text-muted)] hover:text-[var(--app-text)] bg-[var(--sidebar-bg)] transition-all group border border-[var(--border-color)]"
+              onClick={() => fileInputRef.current?.click()}
+              title="Attach files"
+              className="p-1.5 text-[var(--app-text-muted)] hover:text-blue-600 rounded-full transition-all hover:bg-[var(--sidebar-bg)] border-none"
             >
-              <span className="truncate max-w-[120px]">{currentModel?.name || 'Branch Model'}</span>
-              <svg className="w-3.5 h-3.5 text-[var(--app-text-muted)] group-hover:text-[var(--app-text)]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l4-4 4 4m0 6l-4 4-4-4" /></svg>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+              </svg>
             </button>
 
-            {/* Mini Model Menu */}
-            {isModelMenuOpen && (
-              <div className="absolute top-[calc(100%+6px)] left-0 w-48 max-h-48 overflow-y-auto bg-[var(--card-bg)] border border-[var(--border-color)] rounded-xl shadow-xl z-[70] p-1 custom-scrollbar">
-                {MODELS.map(model => (
-                  <button
-                    key={model.id}
-                    onClick={() => { onModelSelect(model.id); setIsModelMenuOpen(false); }}
-                    className={`w-full flex justify-between items-center text-left px-2 py-1.5 text-[11px] rounded-lg transition-colors ${selectedModel === model.id ? 'bg-[var(--accent-color)]/20 text-[var(--app-text)] font-semibold' : 'text-[var(--app-text-muted)] hover:bg-[var(--sidebar-bg)] hover:text-[var(--app-text)]'}`}
-                  >
-                    <span className="truncate">{model.name}</span>
-                    {selectedModel === model.id && <svg className="w-3 h-3 text-[var(--accent-color)] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>}
-                  </button>
-                ))}
-              </div>
-            )}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setIsModelMenuOpen(!isModelMenuOpen)}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold text-[var(--app-text-muted)] hover:text-[var(--app-text)] bg-[var(--sidebar-bg)] transition-all group border border-[var(--border-color)]"
+              >
+                <span className="truncate max-w-[120px]">{currentModel?.name || 'Branch Model'}</span>
+                <svg className="w-3.5 h-3.5 text-[var(--app-text-muted)] group-hover:text-[var(--app-text)]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l4-4 4 4m0 6l-4 4-4-4" /></svg>
+              </button>
+
+              {/* Mini Model Menu */}
+              {isModelMenuOpen && (
+                <div className="absolute top-[calc(100%+6px)] left-0 w-48 max-h-48 overflow-y-auto bg-[var(--card-bg)] border border-[var(--border-color)] rounded-xl shadow-xl z-[70] p-1 custom-scrollbar">
+                  {MODELS.map(model => (
+                    <button
+                      key={model.id}
+                      onClick={() => { onModelSelect(model.id); setIsModelMenuOpen(false); }}
+                      className={`w-full flex justify-between items-center text-left px-2 py-1.5 text-[11px] rounded-lg transition-colors ${selectedModel === model.id ? 'bg-blue-600/10 text-blue-600 font-semibold' : 'text-[var(--app-text-muted)] hover:bg-[var(--sidebar-bg)] hover:text-[var(--app-text)]'}`}
+                    >
+                      <span className="truncate">{model.name}</span>
+                      {selectedModel === model.id && <svg className="w-3 h-3 text-blue-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 };
@@ -595,11 +616,21 @@ const BranchMiniChat: React.FC<BranchMiniChatProps> = ({
     return () => {
       window.removeEventListener('resize', updatePosition);
     };
-  }, [line, uniqueMsgId, containerRef, history.length]); // Re-run when history changes to adjust for new content layout
+  }, [line, uniqueMsgId, containerRef]); // history.length removed as it is not in scope and pos is updated by line/resize
 
+
+  const [isFocused, setIsFocused] = useState(false);
+
+  const miniScrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!collapsed) messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (!collapsed && miniScrollRef.current) {
+      // Small timeout to ensure layout is done and avoid triggering parent scroll behavior
+      const el = miniScrollRef.current;
+      setTimeout(() => {
+        el.scrollTop = el.scrollHeight;
+      }, 0);
+    }
   }, [messages.length, collapsed]);
 
   const handleSend = () => {
@@ -630,18 +661,20 @@ const BranchMiniChat: React.FC<BranchMiniChatProps> = ({
 
       {/* Mini chat panel — pointer-events-auto so it captures mouse fully */}
       <div
-        className="pointer-events-auto absolute flex flex-col bg-[var(--card-bg)] border border-[var(--border-color)] rounded-2xl shadow-xl overflow-hidden transition-all duration-200"
+        className={`pointer-events-auto absolute flex flex-col bg-[var(--card-bg)] border border-[var(--border-color)] rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.08)] overflow-hidden transition-all duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)] ${collapsed ? 'w-[240px] h-9' : 'w-[280px] h-[260px]'
+          }`}
         style={{
-          top: panelTop - pos.top,
+          top: collapsed ? -18 : -110,
           left: 0,
-          width: 280,
-          height: collapsed ? 36 : 260,
         }}
         onWheel={e => e.stopPropagation()} // keep scroll inside the mini chat
       >
         {/* Header */}
-        <div className="flex items-center gap-2 px-2.5 py-1.5 border-b border-[var(--border-color)] bg-[var(--sidebar-bg)] shrink-0">
-          <div className="w-1.5 h-1.5 bg-blue-500 rounded-full shrink-0" />
+        <div
+          onClick={() => setCollapsed(!collapsed)}
+          className="flex items-center gap-2 px-3 py-2 border-b border-[var(--border-color)] bg-[var(--sidebar-bg)] shrink-0 cursor-pointer hover:bg-[var(--card-hover)] transition-colors group"
+        >
+          <div className="w-1.5 h-1.5 bg-blue-500 rounded-full shrink-0 shadow-[0_0_8px_rgba(59,130,246,0.5)]" />
           <span className="text-[10px] font-bold uppercase tracking-widest text-[var(--app-text-muted)] truncate flex-1 min-w-0">
             {displayTitle}
           </span>
@@ -651,78 +684,86 @@ const BranchMiniChat: React.FC<BranchMiniChatProps> = ({
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
             </svg>
           )}
-          {onGoToNode && (
-            <button type="button" onClick={onGoToNode} title="Go to branch"
-              className="p-0.5 text-[var(--app-text-muted)] hover:text-blue-400 transition-colors shrink-0">
-              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+          <div className="flex items-center gap-1">
+            {onGoToNode && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onGoToNode(); }}
+                title="Go to branch"
+                className="p-1 text-[var(--app-text-muted)] hover:text-blue-500 transition-colors shrink-0 rounded-md"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                </svg>
+              </button>
+            )}
+            <div className={`p-0.5 text-[var(--app-text-muted)] transition-all duration-300 ${collapsed ? '' : 'rotate-180 bg-[var(--app-text)] text-[var(--card-bg)] rounded-md'}`}>
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
               </svg>
-            </button>
-          )}
-          <button type="button" onClick={() => setCollapsed(c => !c)} title={collapsed ? 'Expand' : 'Collapse'}
-            className="p-0.5 text-[var(--app-text-muted)] hover:text-zinc-300 transition-colors shrink-0">
-            <svg className={`w-3 h-3 transition-transform duration-200 ${collapsed ? 'rotate-180' : ''}`}
-              fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
+            </div>
+          </div>
         </div>
 
         {!collapsed && (
-          <>
-            <div className="flex-1 overflow-y-auto px-3 py-2 space-y-2 custom-scrollbar text-[11px]">
+          <div className="flex-1 flex flex-col min-h-0 relative">
+            {/* Vertical connection line inside chat area */}
+            <div className="absolute left-4 top-0 bottom-0 w-px bg-zinc-100/50 z-0" />
+
+            <div ref={miniScrollRef} className="flex-1 overflow-y-auto px-3 py-2 space-y-2 custom-scrollbar text-[11px] relative z-10">
               {messages.length === 0 && !isGeneratingThisNode && (
                 <div className="flex items-center justify-center h-full text-[var(--app-text-muted)] text-center">No messages yet</div>
               )}
               {messages.map((msg, i) => (
-                <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-[92%] px-2.5 py-1.5 rounded-xl leading-relaxed ${msg.role === 'user' ? 'bg-[var(--msg-user)] border border-[var(--border-color)] text-[var(--app-text)] rounded-tr-none text-[11px]' : 'bg-transparent text-[var(--app-text)] pl-0'
+                <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end pr-1' : 'justify-start'} relative z-10 w-full`}>
+                  <div className={`max-w-[92%] transition-all ${msg.role === 'user'
+                    ? 'px-2.5 py-1.5 rounded-xl bg-[var(--card-bg)] border border-[var(--border-color)] text-[var(--app-text)] rounded-tr-none text-[11px] shadow-sm'
+                    : 'bg-transparent text-[var(--app-text)] pl-6 py-1 text-[11px] leading-relaxed w-full'
                     }`}>
                     {msg.role === 'user' ? msg.content : (
                       msg.content
                         ? <MiniMarkdown content={msg.content} />
                         : isGeneratingThisNode && i === messages.length - 1
-                          ? <span className="text-zinc-500 italic">Thinking…</span>
+                          ? <div className="flex gap-1 py-1"><div className="w-1 h-1 bg-zinc-300 rounded-full animate-bounce" /><div className="w-1 h-1 bg-zinc-300 rounded-full animate-bounce [animation-delay:0.2s]" /><div className="w-1 h-1 bg-zinc-300 rounded-full animate-bounce [animation-delay:0.4s]" /></div>
                           : null
                     )}
                   </div>
                 </div>
               ))}
               {isGeneratingThisNode && messages.length === 0 && (
-                <div className="text-zinc-500 italic px-1">Thinking…</div>
+                <div className="flex gap-1 py-1 relative z-10 pl-6"><div className="w-1 h-1 bg-blue-300 rounded-full animate-bounce" /><div className="w-1 h-1 bg-blue-300 rounded-full animate-bounce [animation-delay:0.2s]" /><div className="w-1 h-1 bg-blue-300 rounded-full animate-bounce [animation-delay:0.4s]" /></div>
               )}
               <div ref={messagesEndRef} />
             </div>
-            <div className="shrink-0 border-t border-[var(--border-color)] px-2 py-1.5 flex items-center gap-1.5 bg-[var(--card-bg)]">
+            <div className="shrink-0 border-t border-[var(--border-color)] px-2.5 py-2 flex items-center gap-2 bg-[var(--card-bg)]">
               <input
                 type="text"
                 value={input}
                 onChange={e => setInput(e.target.value)}
+                onFocus={() => setIsFocused(true)}
+                onBlur={() => setIsFocused(false)}
                 onKeyDown={e => {
                   if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); handleSend(); }
                 }}
-                placeholder="Continue branch…"
+                placeholder="Type a branch prompt..."
                 disabled={isGeneratingThisNode}
-                className="flex-1 bg-transparent text-[11px] text-[var(--app-text)] placeholder:text-[var(--app-text-muted)] outline-none border-none min-w-0 disabled:opacity-50"
+                className="flex-1 bg-transparent text-[12px] text-[var(--app-text)] placeholder:text-[var(--app-text-muted)] outline-none border-none min-w-0 disabled:opacity-50"
               />
               {isGeneratingThisNode ? (
                 <button type="button" onClick={onStopGeneration} title="Stop generating"
-                  className="p-1 text-red-500 hover:text-red-600 transition-colors shrink-0">
-                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+                  className="p-1 text-[var(--app-text)] hover:text-red-500 transition-colors shrink-0">
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
                     <rect x="6" y="6" width="12" height="12" rx="2" ry="2" />
                   </svg>
                 </button>
               ) : (
-                <button type="button" onClick={handleSend}
-                  disabled={!input.trim()}
-                  className="p-1 text-blue-600 hover:text-blue-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors shrink-0">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                  </svg>
+                <button type="button" onClick={handleSend} disabled={!input.trim()}
+                  className={`p-1.5 rounded-lg transition-all ${!input.trim() ? 'text-zinc-200' : 'bg-blue-600/10 text-blue-600 hover:bg-blue-600/20'}`}>
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" /></svg>
                 </button>
               )}
             </div>
-          </>
+          </div>
         )}
       </div>
     </div>
@@ -949,7 +990,9 @@ export const ChatView: React.FC<ChatViewProps> = ({
   });
 
   return (
-    <div ref={containerRef} className="w-full h-full flex flex-col bg-transparent overflow-hidden pt-20 relative">
+    <div ref={containerRef} className="w-full h-full flex flex-col bg-transparent overflow-hidden relative">
+      {/* Top Fade Overlay (Gemini Style) */}
+      <div className="absolute top-0 left-0 right-0 h-32 bg-gradient-to-b from-[var(--app-bg)] via-[var(--app-bg)] to-transparent z-40 pointer-events-none" />
 
       {cursor && !activeBranch && (
         <BranchGhostLabel x={cursor.x} y={cursor.y} />
@@ -979,8 +1022,8 @@ export const ChatView: React.FC<ChatViewProps> = ({
         </div>
       )}
 
-      <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto custom-scrollbar relative z-10">
-        <div className="relative w-full min-h-full" ref={contentRef}>
+      <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto custom-scrollbar relative z-10 pt-20 pb-48">
+        <div className="relative w-full min-h-full">
           {/* Branching Zone — rendered inside scroll content so it doesn't block mini-chats */}
           <div
             className="absolute top-0 h-full z-0 cursor-default"
@@ -993,7 +1036,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
               if (scrollRef.current) scrollRef.current.scrollTop += e.deltaY;
             }}
           />
-          <div className="max-w-3xl mx-auto px-6 pt-8 pb-12 space-y-8">
+          <div className="max-w-3xl mx-auto px-6 pt-8 pb-12 space-y-8 relative" ref={contentRef}>
             {allMessages.map(({ msg, nodeId }, idx) => {
               const uniqueMsgId = `${nodeId}-${idx}`;
 
@@ -1022,22 +1065,13 @@ export const ChatView: React.FC<ChatViewProps> = ({
                                   <span className="font-mono">{match ? match[1] : 'code'}</span>
                                   <button
                                     onClick={() => navigator.clipboard.writeText(codeContent)}
-                                    className="flex items-center gap-1.5 hover:text-white transition-colors"
+                                    className="p-1 hover:bg-zinc-200 rounded transition-colors group/btn relative"
+                                    title="Copy code"
                                   >
-                                    <svg
-                                      className="w-4 h-4"
-                                      fill="none"
-                                      stroke="currentColor"
-                                      viewBox="0 0 24 24"
-                                      xmlns="http://www.w3.org/2000/svg"
-                                    >
-                                      <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        strokeWidth={2}
-                                        d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10a2 2 0 00-2 2v8a2 2 0 002 2h8a2 2 0 002-2v-8a2 2 0 00-2-2z"
-                                      />
-                                    </svg>                                  <span>Copy</span>
+                                    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                                    </svg>
                                   </button>
                                 </div>
                                 {match ? (
@@ -1082,27 +1116,15 @@ export const ChatView: React.FC<ChatViewProps> = ({
                           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" /></svg>
                         </button>
                       )}
-                      <button onClick={() => handleCopyMessage(msg.content, uniqueMsgId)} className="flex items-center gap-1.5 hover:text-blue-400 transition-colors py-1">
-                        <span className="text-[10px] uppercase font-bold tracking-widest">
-                          {copiedMessageId === uniqueMsgId ? 'Copied!' : 'Copy'}
-                        </span>
-                        {copiedMessageId === uniqueMsgId ? (
-                          <svg className="w-3.5 h-3.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
-                        ) : (
-                          <svg
-                            className="w-4 h-4"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                            xmlns="http://www.w3.org/2000/svg"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10a2 2 0 00-2 2v8a2 2 0 002 2h8a2 2 0 002-2v-8a2 2 0 00-2-2z"
-                            />
-                          </svg>)}
+                      <button
+                        onClick={() => handleCopyMessage(msg.content, uniqueMsgId)}
+                        className="flex items-center gap-1.5 hover:text-blue-500 transition-colors py-1 px-1.5 rounded-md hover:bg-blue-50/50"
+                        title="Copy message"
+                      >
+                        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                        </svg>
                       </button>
                     </div>
                   </div>
@@ -1118,39 +1140,38 @@ export const ChatView: React.FC<ChatViewProps> = ({
                 </svg>
               </div>
             )}
+            {/* Mini chat overlays moved inside max-w-3xl container */}
+            {branchLines
+              .filter(line => historyMessageIds.has(line.messageId) && line.targetNodeId !== currentNodeId)
+              .map((line, i) => {
+                const branchNode = line.targetNodeId ? nodes[line.targetNodeId] : undefined;
+                const isGeneratingThisNode = isGenerating && generatingNodeId === line.targetNodeId;
+                const activeNode = history.find(n => n.id === currentNodeId);
+                const displayTitle = (activeNode as any)?.title || currentTitle;
+                return (
+                  <BranchMiniChat
+                    key={line.targetNodeId ?? i}
+                    line={line}
+                    uniqueMsgId={line.messageId}
+                    branchNode={branchNode}
+                    isGeneratingThisNode={isGeneratingThisNode}
+                    title={displayTitle}
+                    containerRef={contentRef}
+                    onSendMessage={
+                      line.targetNodeId && onSendMessageToNode
+                        ? (text, files) => onSendMessageToNode!(line.targetNodeId!, text, files, isThinking)
+                        : undefined
+                    }
+                    onGoToNode={
+                      line.targetNodeId && onSelectNode
+                        ? () => onSelectNode!(line.targetNodeId!)
+                        : undefined
+                    }
+                    onStopGeneration={onStopGeneration}
+                  />
+                );
+              })}
           </div>
-
-          {/* Mini chat overlays — rendered inside the scroll CONTENT so they move natively! */}
-          {branchLines
-            .filter(line => historyMessageIds.has(line.messageId) && line.targetNodeId !== currentNodeId)
-            .map((line, i) => {
-              const branchNode = line.targetNodeId ? nodes[line.targetNodeId] : undefined;
-              const isGeneratingThisNode = isGenerating && generatingNodeId === line.targetNodeId;
-              const activeNode = history.find(n => n.id === currentNodeId);
-              const displayTitle = (activeNode as any)?.title || currentTitle;
-              return (
-                <BranchMiniChat
-                  key={line.targetNodeId ?? i}
-                  line={line}
-                  uniqueMsgId={line.messageId}
-                  branchNode={branchNode}
-                  isGeneratingThisNode={isGeneratingThisNode}
-                  title={displayTitle}
-                  containerRef={contentRef}
-                  onSendMessage={
-                    line.targetNodeId && onSendMessageToNode
-                      ? (text, files) => onSendMessageToNode!(line.targetNodeId!, text, files, isThinking)
-                      : undefined
-                  }
-                  onGoToNode={
-                    line.targetNodeId && onSelectNode
-                      ? () => onSelectNode!(line.targetNodeId!)
-                      : undefined
-                  }
-                  onStopGeneration={onStopGeneration}
-                />
-              );
-            })}
         </div>
       </div>
 
@@ -1179,9 +1200,9 @@ export const ChatView: React.FC<ChatViewProps> = ({
         </div>
       </div>
 
-      <div className="w-full pb-10 pt-6 z-20" style={{ background: 'linear-gradient(to top, var(--app-bg) 20%, transparent 100%)' }}>
-        <div className="max-w-3xl mx-auto px-6">
-          {isBranching && (
+      <div className="absolute bottom-0 left-0 right-0 pb-10 pt-32 z-30 pointer-events-none" style={{ background: 'linear-gradient(to top, var(--app-bg) 40%, transparent 100%)' }}>
+        <div className="max-w-3xl mx-auto px-6 pointer-events-auto">
+          {isBranching && !activeBranch && !branchLines.some(bl => bl.targetNodeId && nodes[bl.targetNodeId]?.messages?.length > 0) && (
             <div className="flex items-center justify-between px-6 py-2.5 bg-blue-50 border border-blue-100 text-blue-600 rounded-t-2xl mb-[-1px] mx-2 animate-in slide-in-from-bottom-2">
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
@@ -1304,7 +1325,10 @@ export const ChatView: React.FC<ChatViewProps> = ({
                         <div className="p-3 border-b border-[var(--border-color)] space-y-2.5">
                           <div className="flex items-center justify-between px-1">
                             <span className="text-[13px] font-semibold text-[var(--app-text)]">Models</span>
-                            <button className="text-[10px] uppercase tracking-wider font-bold bg-blue-50 text-blue-600 border border-blue-100 px-2 py-1 rounded-lg hover:bg-blue-100 transition-colors">
+                            <button
+                              onClick={() => window.location.href = "https://buy.stripe.com/00w9AVbsA88M9438lC1Nu01"}
+                              className="text-[10px] uppercase tracking-wider font-bold bg-blue-50 text-blue-600 border border-blue-100 px-2 py-1 rounded-lg hover:bg-blue-100 transition-colors"
+                            >
                               Unlock All
                             </button>
                           </div>
@@ -1367,7 +1391,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
                   <button
                     type="button"
                     onClick={onStopGeneration}
-                    className="p-2 rounded-xl transition-all text-red-500 hover:text-red-400 hover:scale-[1.02] active:scale-[0.98]"
+                    className="p-2 rounded-xl transition-all text-[var(--app-text)] hover:text-[var(--accent-color)] hover:scale-[1.02] active:scale-[0.98]"
                     title="Stop generating"
                   >
                     <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2" ry="2" /></svg>

@@ -54,7 +54,7 @@ const App: React.FC = () => {
 
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatingNodeId, setGeneratingNodeId] = useState<string | null>(null);
-  const [selectedModel, setSelectedModel] = useState("gemini-3-flash-preview");
+  const [selectedModel, setSelectedModel] = useState("arcee-ai/trinity-large-preview:free");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const generationRef = React.useRef<any>(null);
 
@@ -721,17 +721,32 @@ const App: React.FC = () => {
         } />
         <Route path="/" element={
           <div className="flex h-full w-full overflow-hidden">
+            {sidebarCollapsed && (
+              <div className="fixed top-0 left-6 h-16 flex items-center z-[300]">
+                <button
+                  onClick={() => setSidebarCollapsed(false)}
+                  className="p-2.5 bg-[var(--card-bg)] border border-[var(--border-color)] text-[var(--app-text)] rounded-xl shadow-xl hover:scale-105 active:scale-95 transition-all group overflow-hidden sidebar-button-entrance"
+                  title="Expand sidebar"
+                >
+                  <div className="absolute inset-0 bg-[var(--accent-color)]/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  <svg className="w-5 h-5 relative z-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 6h16M4 12h16M4 18h7" />
+                  </svg>
+                </button>
+              </div>
+            )}
+
             <aside
               className={`
-                relative flex flex-col bg-[var(--sidebar-bg)] border-r border-[var(--sidebar-border)] transition-all duration-[450ms] ease-[cubic-bezier(0.2,0.8,0.2,1)] z-[200]
-                ${sidebarCollapsed ? 'w-16' : 'w-72 opacity-100'}
+                relative flex flex-col bg-[var(--sidebar-bg)] border-r border-[var(--sidebar-border)] transition-[width,opacity] duration-[450ms] ease-[cubic-bezier(0.2,0.8,0.2,1)] z-[200] overflow-hidden
+                ${sidebarCollapsed ? 'w-0 opacity-0 pointer-events-none' : 'w-72 opacity-100'}
               `}
             >
-              {/* LOGO + COLLAPSE TOGGLE */}
-              <div className="flex items-center gap-4 pointer-events-auto pt-10 px-4 mb-4 justify-between">
-                {!sidebarCollapsed && (
+              <div className="w-72 flex flex-col h-full shrink-0">
+                {/* LOGO + COLLAPSE TOGGLE */}
+                <div className="flex items-center h-16 px-6 justify-between border-b border-[var(--sidebar-border)] mb-0">
                   <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-sm shrink-0 overflow-hidden border border-[var(--border-color)]">
+                    <div className="w-9 h-9 bg-white rounded-xl flex items-center justify-center shadow-sm shrink-0 overflow-hidden border border-[var(--border-color)]">
                       <img src="/logo.png" alt="Klados Logo" className="w-full h-full object-contain" />
                     </div>
                     <div>
@@ -739,13 +754,6 @@ const App: React.FC = () => {
                       <p className="text-[8px] font-bold tracking-[0.2em] uppercase text-[var(--app-text-muted)]">Beta Version</p>
                     </div>
                   </div>
-                )}
-                {sidebarCollapsed && (
-                  <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-sm mx-auto overflow-hidden border border-[var(--border-color)]">
-                    <img src="/logo.png" alt="Klados Logo" className="w-full h-full object-contain" />
-                  </div>
-                )}
-                {!sidebarCollapsed && (
                   <button
                     onClick={() => setSidebarCollapsed(true)}
                     className="p-2 rounded-lg hover:bg-[var(--card-hover)] text-[var(--app-text-muted)] hover:text-[var(--app-text)] transition-all shrink-0"
@@ -755,152 +763,131 @@ const App: React.FC = () => {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
                     </svg>
                   </button>
+                </div>
+
+                {!sidebarCollapsed && (
+                  <>
+                    <div className="p-6">
+                      <button
+                        onClick={() => handleSelectConversation(null)}
+                        className="w-full flex items-center justify-center gap-3 py-3 bg-[var(--card-bg)] border border-[var(--border-color)] hover:border-[var(--accent-color)] hover:bg-[var(--card-hover)] rounded-xl transition-all group active:scale-95 shadow-sm"
+                      >
+                        <div className="p-1 bg-[var(--accent-color)]/10 rounded-md">
+                          <svg className="w-4 h-4 text-[var(--accent-color)] group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+                          </svg>
+                        </div>
+                        <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-[var(--app-text)]">New Chat</span>
+                      </button>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto custom-scrollbar [mask-image:linear-gradient(to_bottom,black_96%,transparent_100%)] px-3 pb-4">
+                      {groupedConversations.length === 0 && (
+                        <div className="px-3 py-20 text-center opacity-10">
+                          <svg className="w-12 h-12 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeWidth={1} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
+                          <p className="text-[10px] font-bold uppercase tracking-widest">No active protocols</p>
+                        </div>
+                      )}
+
+                      <div className="space-y-6">
+                        {groupedConversations.map(([groupName, groupConvs]) => {
+                          const isCollapsed = collapsedGroups[groupName];
+
+                          return (
+                            <div key={groupName} className="space-y-1.5">
+                              <button
+                                onClick={() => toggleGroup(groupName)}
+                                className="w-full flex items-center justify-between px-3 py-1 group/header hover:bg-[var(--card-hover)] rounded-lg transition-colors active:scale-[0.98]"
+                              >
+                                <h4 className="text-[9px] font-black uppercase tracking-[0.2em] text-[var(--app-text-muted)] group-hover/header:text-[var(--app-text)] transition-colors">
+                                  {groupName}
+                                </h4>
+                                <svg
+                                  className={`w-3.5 h-3.5 text-[var(--app-text-muted)] transition-transform duration-200 ${isCollapsed ? '-rotate-90' : 'rotate-0'}`}
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                  stroke="currentColor"
+                                >
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                </svg>
+                              </button>
+
+                              {!isCollapsed && (
+                                <div className="space-y-1.5">
+                                  {groupConvs.map((conv) => (
+                                    <div
+                                      key={conv.id}
+                                      className={`relative group/conv rounded-xl transition-all border ${activeConvId === conv.id ? 'bg-[var(--card-hover)] border-[var(--border-color)] text-[var(--app-text)]' : 'bg-transparent border-transparent text-[var(--app-text-muted)] hover:bg-[var(--card-hover)]/50 hover:text-[var(--app-text)]'}`}
+                                    >
+                                      <button
+                                        onClick={() => handleSelectConversation(conv.id)}
+                                        className="w-full text-left px-4 py-2.5 rounded-xl transition-all"
+                                      >
+                                        <h3 className="text-sm font-medium truncate pr-10 leading-tight">{conv.title}</h3>
+                                      </button>
+
+                                      <button
+                                        onClick={(e) => handleDeleteConversation(conv.id, e)}
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 p-2 opacity-0 group-hover/conv:opacity-100 hover:bg-red-600 text-white bg-[var(--app-text)] rounded-lg transition-all"
+                                        title="Delete conversation"
+                                      >
+                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                        </svg>
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="p-4 border-t border-[var(--sidebar-border)] bg-[var(--sidebar-bg)]">
+                      <button
+                        onClick={() => navigate('/profile')}
+                        className="w-full flex items-center p-2.5 gap-3 bg-[var(--card-bg)] border border-[var(--border-color)] hover:border-[var(--accent-color)] hover:bg-[var(--card-hover)] rounded-xl transition-all active:scale-[0.98] shadow-sm group"
+                      >
+                        <div className="h-10 w-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold shrink-0 shadow-inner">
+                          {fullName?.charAt(0) || 'U'}
+                        </div>
+
+                        <div className="flex flex-col items-start overflow-hidden text-[var(--app-text)]">
+                          <span className="text-sm font-medium truncate ">
+                            {fullName || "User Profile"}
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-black uppercase tracking-wider text-[var(--app-text-muted)]">
+                              Free Plan
+                            </span>
+                          </div>
+                        </div>
+
+                        <svg
+                          className="ml-auto w-4 h-4 text-[var(--app-text-muted)] group-hover:text-[var(--app-text)] transition-colors"
+                          fill="none" viewBox="0 0 24 24" stroke="currentColor"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </button>
+                    </div>
+                  </>
                 )}
               </div>
-
-              {/* Expand button when collapsed */}
-              {sidebarCollapsed && (
-                <button
-                  onClick={() => setSidebarCollapsed(false)}
-                  className="mx-auto mt-2 mb-4 p-2 rounded-lg hover:bg-[var(--card-hover)] text-[var(--app-text-muted)] hover:text-[var(--app-text)] transition-all"
-                  title="Expand sidebar"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
-                  </svg>
-                </button>
-              )}
-
-              {/* Collapsed: just show New Chat icon */}
-              {sidebarCollapsed ? (
-                <div className="flex flex-col items-center gap-4 px-2">
-                  <button
-                    onClick={() => handleSelectConversation(null)}
-                    className="w-10 h-10 flex items-center justify-center bg-[var(--app-text)] text-[var(--app-bg)] hover:bg-[var(--accent-color)] rounded-xl transition-all active:scale-95"
-                    title="New Chat"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 4v16m8-8H4" />
-                    </svg>
-                  </button>
-                </div>
-              ) : (
-                <>
-                  <div className="p-6">
-                    <button
-                      onClick={() => handleSelectConversation(null)}
-                      className="w-full flex items-center justify-center gap-3 py-3 bg-[var(--card-bg)] border border-[var(--border-color)] hover:border-[var(--accent-color)] hover:bg-[var(--card-hover)] rounded-xl transition-all group active:scale-95 shadow-sm"
-                    >
-                      <div className="p-1 bg-[var(--accent-color)]/10 rounded-md">
-                        <svg className="w-4 h-4 text-[var(--accent-color)] group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
-                        </svg>
-                      </div>
-                      <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-[var(--app-text)]">New Chat</span>
-                    </button>
-                  </div>
-
-                  <div className="flex-1 overflow-y-auto custom-scrollbar [mask-image:linear-gradient(to_bottom,black_96%,transparent_100%)] px-3 pb-4">
-                    {groupedConversations.length === 0 && (
-                      <div className="px-3 py-20 text-center opacity-10">
-                        <svg className="w-12 h-12 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeWidth={1} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
-                        <p className="text-[10px] font-bold uppercase tracking-widest">No active protocols</p>
-                      </div>
-                    )}
-
-                    <div className="space-y-6">
-                      {groupedConversations.map(([groupName, groupConvs]) => {
-                        const isCollapsed = collapsedGroups[groupName];
-
-                        return (
-                          <div key={groupName} className="space-y-1.5">
-                            <button
-                              onClick={() => toggleGroup(groupName)}
-                              className="w-full flex items-center justify-between px-3 py-1 group/header hover:bg-[var(--card-hover)] rounded-lg transition-colors active:scale-[0.98]"
-                            >
-                              <h4 className="text-[9px] font-black uppercase tracking-[0.2em] text-[var(--app-text-muted)] group-hover/header:text-[var(--app-text)] transition-colors">
-                                {groupName}
-                              </h4>
-                              <svg
-                                className={`w-3.5 h-3.5 text-[var(--app-text-muted)] transition-transform duration-200 ${isCollapsed ? '-rotate-90' : 'rotate-0'}`}
-                                fill="none"
-                                viewBox="0 0 24 24"
-                                stroke="currentColor"
-                              >
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                              </svg>
-                            </button>
-
-                            {!isCollapsed && (
-                              <div className="space-y-1.5">
-                                {groupConvs.map((conv) => (
-                                  <div
-                                    key={conv.id}
-                                    className={`relative group/conv rounded-xl transition-all border ${activeConvId === conv.id ? 'bg-[var(--card-hover)] border-[var(--border-color)] text-[var(--app-text)]' : 'bg-transparent border-transparent text-[var(--app-text-muted)] hover:bg-[var(--card-hover)]/50 hover:text-[var(--app-text)]'}`}
-                                  >
-                                    <button
-                                      onClick={() => handleSelectConversation(conv.id)}
-                                      className="w-full text-left px-4 py-2.5 rounded-xl transition-all"
-                                    >
-                                      <h3 className="text-sm font-medium truncate pr-10 leading-tight">{conv.title}</h3>
-                                    </button>
-
-                                    <button
-                                      onClick={(e) => handleDeleteConversation(conv.id, e)}
-                                      className="absolute right-3 top-1/2 -translate-y-1/2 p-2 opacity-0 group-hover/conv:opacity-100 hover:bg-red-600 text-white bg-[var(--app-text)] rounded-lg transition-all"
-                                      title="Delete conversation"
-                                    >
-                                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                      </svg>
-                                    </button>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  <div className="p-4 border-t border-[var(--sidebar-border)] bg-[var(--sidebar-bg)]">
-                    <button
-                      onClick={() => navigate('/profile')}
-                      className="w-full flex items-center p-2.5 gap-3 bg-[var(--card-bg)] border border-[var(--border-color)] hover:border-[var(--accent-color)] hover:bg-[var(--card-hover)] rounded-xl transition-all active:scale-[0.98] shadow-sm group"
-                    >
-                      <div className="h-10 w-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold shrink-0 shadow-inner">
-                        {fullName?.charAt(0) || 'U'}
-                      </div>
-
-                      <div className="flex flex-col items-start overflow-hidden text-[var(--app-text)]">
-                        <span className="text-sm font-medium truncate ">
-                          {fullName || ""}
-                        </span>
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] font-black uppercase tracking-wider text-[var(--app-text-muted)]">
-                            Free Plan
-                          </span>
-                        </div>
-                      </div>
-
-                      <svg
-                        className="ml-auto w-4 h-4 text-[var(--app-text-muted)] group-hover:text-[var(--app-text)] transition-colors"
-                        fill="none" viewBox="0 0 24 24" stroke="currentColor"
-                      >
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                      </svg>
-                    </button>
-                  </div>
-                </>
-              )}
             </aside>
 
             {/* Main Workspace */}
             <div className="flex-1 flex flex-col relative overflow-hidden bg-[var(--app-bg)]">
-              <header className="z-[100] h-16 bg-[var(--header-bg)] backdrop-blur-md px-10 flex items-center justify-between absolute top-0 left-0 right-0 border-b border-[var(--header-border)]">
+              <header
+                className={`
+                  z-[100] h-16 bg-[var(--header-bg)] backdrop-blur-md flex items-center justify-between absolute top-0 left-0 right-0 border-b border-[var(--header-border)] transition-[padding-left] duration-[450ms] ease-[cubic-bezier(0.2,0.8,0.2,1)]
+                  ${sidebarCollapsed ? 'pl-24 pr-10' : 'px-10'}
+                `}
+              >
                 <div className="flex items-center gap-6 overflow-hidden">
-                  <h2 className="text-sm font-semibold tracking-tight text-[var(--app-text)] truncate max-w-[300px]">
+                  <h2 className="text-sm font-semibold tracking-tight text-[var(--app-text)] truncate max-w-[180px] sm:max-w-[300px] md:max-w-md lg:max-w-lg">
                     {currentTitle}
                   </h2>
                   {workspace.currentNodeId && (
