@@ -5,6 +5,7 @@
 export interface Message {
   role: 'user' | 'model';
   content: string;
+  thinkingTrace?: string;
   timestamp: number;
   /**
    * Position within the node (0 = first, 1 = second, etc.)

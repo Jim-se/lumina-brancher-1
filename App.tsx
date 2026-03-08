@@ -10,7 +10,7 @@ import { useTheme } from './src/contexts/ThemeContext';
 import { dbService } from './services/dbService';
 import { initSupabase } from './services/supabaseClient';
 import { generateResponseOpenAI } from './services/openaiService';
-import { generateResponse, generateTitle } from './services/openRouterService';
+import { generateResponse, generateTitle, ResponseStreamDelta } from './services/openRouterService';
 interface Conversation {
   id: string;
   nodes: Record<string, ChatNode>;
@@ -111,6 +111,10 @@ const App: React.FC = () => {
   // Add this near the top of your App component, after the useState declarations:
 
   useEffect(() => {
+    if (!import.meta.env.DEV) {
+      return;
+    }
+
     console.log('🔍 [WORKSPACE UPDATE]');
     console.log('  - Total nodes:', Object.keys(workspace.nodes).length);
     console.log('  - Node IDs:', Object.keys(workspace.nodes));
@@ -168,6 +172,38 @@ const App: React.FC = () => {
       [...node.messages].sort((a, b) => a.ordinal - b.ordinal)
     );
   }, [workspace.currentNodeId, getFullHistoryPath]);
+
+  const applyAssistantDelta = useCallback((nodeId: string, messageTimestamp: number, delta: ResponseStreamDelta) => {
+    if (!delta.text && !delta.reasoning) {
+      return;
+    }
+
+    setWorkspace(prev => {
+      const node = prev.nodes[nodeId];
+      if (!node) return prev;
+
+      const updatedMessages = [...node.messages];
+      const lastMsg = updatedMessages[updatedMessages.length - 1];
+
+      if (lastMsg?.role !== 'model' || lastMsg.timestamp !== messageTimestamp) {
+        return prev;
+      }
+
+      updatedMessages[updatedMessages.length - 1] = {
+        ...lastMsg,
+        content: `${lastMsg.content ?? ''}${delta.text ?? ''}`,
+        thinkingTrace: `${lastMsg.thinkingTrace ?? ''}${delta.reasoning ?? ''}` || undefined
+      };
+
+      return {
+        ...prev,
+        nodes: {
+          ...prev.nodes,
+          [nodeId]: { ...node, messages: updatedMessages }
+        }
+      };
+    });
+  }, []);
 
   const generateHierarchicalLabel = (parentId: string | null, nodes: Record<string, ChatNode>): string => {
     if (!parentId) return "1";
@@ -407,10 +443,12 @@ const App: React.FC = () => {
 
       // 4. STREAM HANDLING
       let fullResponse = "";
+      let thinkingTrace = "";
       const aiMsgTimestamp = Date.now();
       const aiMsg: Message = {
         role: 'model',
         content: '',
+        thinkingTrace: '',
         timestamp: aiMsgTimestamp,
         ordinal: userMsg.ordinal + 1
       };
@@ -428,32 +466,20 @@ const App: React.FC = () => {
         };
       });
 
-      // Stream Helper
-      const streamWordsGradually = async (textChunk: string) => {
-        fullResponse += textChunk;
-        setWorkspace(prev => {
-          const node = prev.nodes[targetNodeId];
-          if (!node) return prev;
-          const updatedMessages = [...node.messages];
-          const lastMsg = updatedMessages[updatedMessages.length - 1];
-          // Ensure we are updating the AI message we just created
-          if (lastMsg.role === 'model' && lastMsg.timestamp === aiMsgTimestamp) {
-            lastMsg.content = fullResponse;
-          }
-          return {
-            ...prev,
-            nodes: { ...prev.nodes, [targetNodeId]: { ...node, messages: updatedMessages } }
-          };
-        });
-        // Tiny delay to allow React render cycle if needed, though 0 might be too fast for some UIs
-        await new Promise(r => setTimeout(r, 0));
-      };
-
       // Process ModelResult Stream
       try {
-        for await (const textDelta of result.getTextStream()) {
-          if (textDelta) {
-            await streamWordsGradually(textDelta);
+        for await (const delta of result.getDeltaStream()) {
+          if (delta.text) {
+            fullResponse += delta.text;
+          }
+
+          if (delta.reasoning) {
+            thinkingTrace += delta.reasoning;
+          }
+
+          if (delta.text || delta.reasoning) {
+            applyAssistantDelta(targetNodeId, aiMsgTimestamp, delta);
+            await new Promise(r => setTimeout(r, 0));
           }
         }
       } catch (streamErr: any) {
@@ -511,6 +537,7 @@ const App: React.FC = () => {
         nodes_id: targetNodeId,
         role: 'model',
         content: fullResponse,
+        thinkingTrace,
         ordinal: aiMsg.ordinal
       });
 
@@ -628,14 +655,16 @@ const App: React.FC = () => {
         text,
         aiContext as any,
         files,
-        selectedModel
+        selectedModel,
+        thinking
       );
 
       generationRef.current = result;
 
       let fullResponse = '';
+      let thinkingTrace = '';
       const aiMsgTimestamp = Date.now();
-      const aiMsg: Message = { role: 'model', content: '', timestamp: aiMsgTimestamp, ordinal: userMsg.ordinal + 1 };
+      const aiMsg: Message = { role: 'model', content: '', thinkingTrace: '', timestamp: aiMsgTimestamp, ordinal: userMsg.ordinal + 1 };
 
       setWorkspace(prev => {
         const n = prev.nodes[targetNodeId];
@@ -644,19 +673,17 @@ const App: React.FC = () => {
       });
 
       try {
-        for await (const textDelta of result.getTextStream()) {
-          if (textDelta) {
-            fullResponse += textDelta;
-            setWorkspace(prev => {
-              const n = prev.nodes[targetNodeId];
-              if (!n) return prev;
-              const updatedMessages = [...n.messages];
-              const lastMsg = updatedMessages[updatedMessages.length - 1];
-              if (lastMsg.role === 'model' && lastMsg.timestamp === aiMsgTimestamp) {
-                lastMsg.content = fullResponse;
-              }
-              return { ...prev, nodes: { ...prev.nodes, [targetNodeId]: { ...n, messages: updatedMessages } } };
-            });
+        for await (const delta of result.getDeltaStream()) {
+          if (delta.text) {
+            fullResponse += delta.text;
+          }
+
+          if (delta.reasoning) {
+            thinkingTrace += delta.reasoning;
+          }
+
+          if (delta.text || delta.reasoning) {
+            applyAssistantDelta(targetNodeId, aiMsgTimestamp, delta);
             await new Promise(r => setTimeout(r, 0));
           }
         }
@@ -674,7 +701,7 @@ const App: React.FC = () => {
 
       // Save messages to DB
       await dbService.createMessage({ nodes_id: targetNodeId, role: 'user', content: text, ordinal: userMsg.ordinal });
-      await dbService.createMessage({ nodes_id: targetNodeId, role: 'model', content: fullResponse, ordinal: aiMsg.ordinal });
+      await dbService.createMessage({ nodes_id: targetNodeId, role: 'model', content: fullResponse, thinkingTrace, ordinal: aiMsg.ordinal });
 
       console.log(`✅ [BRANCH MINI CHAT] Total time: ${(performance.now() - perfStart).toFixed(0)}ms`);
     } catch (err: any) {
@@ -683,7 +710,7 @@ const App: React.FC = () => {
       setGeneratingNodeId(null);
       generationRef.current = null;
     }
-  }, [isGenerating, workspace.nodes, getFullHistoryPath, selectedModel]);
+  }, [applyAssistantDelta, isGenerating, workspace.nodes, getFullHistoryPath, selectedModel]);
 
   const handleClearAll = () => {
     if (confirm("Purge all topological data from local storage?")) {

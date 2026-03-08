@@ -489,17 +489,34 @@ function useBranchInteraction(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+interface ModelOption {
+  id: string;
+  name: string;
+  provider: string;
+  description: string;
+  isPremium: boolean;
+  thinkingOnly?: boolean;
+  supportsThinkingTrace?: boolean;
+  smartLoading?: boolean;
+}
 
-const MODELS = [
-  { id: 'arcee-ai/trinity-large-preview:free', name: 'Trinity Large (Free)', provider: 'arcee', description: 'Advanced preview model from Arcee AI', isPremium: false },
-  { id: 'openai/gpt-5.3', name: 'GPT 5.3', provider: 'openai', description: 'Next-generation reasoning model with unprecedented scale', isPremium: true },
-  { id: 'openai/gpt-5.2', name: 'GPT 5.2', provider: 'openai', description: 'Highly efficient, ultra-intelligent foundation model', isPremium: true },
-  { id: 'google/gemini-3.1-pro', name: 'Gemini 3.1 Pro', provider: 'google', description: 'Multimodal flagship with advanced logical planning', isPremium: true },
-  { id: 'google/gemini-3-flash', name: 'Gemini 3 Flash', provider: 'google', description: 'Ultrafast response with broad knowledge base', isPremium: false },
-  { id: 'anthropic/claude-4.6-sonnet', name: 'Claude Sonnet 4.6', provider: 'anthropic', description: 'State-of-the-art coding and creative assistance', isPremium: true },
-  { id: 'anthropic/claude-4.6-opus', name: 'Claude Opus 4.6', provider: 'anthropic', description: 'Maximum intelligence for complex scientific tasks', isPremium: true },
-  { id: 'moonshot/kimi-k2.5-thinking', name: 'Kimi K2.5 Thinking', provider: 'moonshot', description: 'Extended chain-of-thought processing', isPremium: true, thinkingOnly: true },
-  { id: 'zhipu/glm-5', name: 'GLM 5', provider: 'zhipu', description: 'Advanced bilingual language model', isPremium: true },
+const MODELS: ModelOption[] = [
+  { id: 'arcee-ai/trinity-large-preview:free', name: 'Trinity Large (Free)', provider: 'arcee', description: 'Advanced preview model from Arcee AI', isPremium: false, smartLoading: false },
+  { id: 'openai/gpt-5.3', name: 'GPT 5.3', provider: 'openai', description: 'Next-generation reasoning model with unprecedented scale', isPremium: true, supportsThinkingTrace: true, smartLoading: true },
+  { id: 'openai/gpt-5.2', name: 'GPT 5.2', provider: 'openai', description: 'Highly efficient, ultra-intelligent foundation model', isPremium: true, supportsThinkingTrace: true, smartLoading: true },
+  { id: 'google/gemini-3.1-pro', name: 'Gemini 3.1 Pro', provider: 'google', description: 'Multimodal flagship with advanced logical planning', isPremium: true, smartLoading: true },
+  { id: 'google/gemini-3-flash', name: 'Gemini 3 Flash', provider: 'google', description: 'Ultrafast response with broad knowledge base', isPremium: false, smartLoading: false },
+  { id: 'anthropic/claude-4.6-sonnet', name: 'Claude Sonnet 4.6', provider: 'anthropic', description: 'State-of-the-art coding and creative assistance', isPremium: true, smartLoading: true },
+  { id: 'anthropic/claude-4.6-opus', name: 'Claude Opus 4.6', provider: 'anthropic', description: 'Maximum intelligence for complex scientific tasks', isPremium: true, smartLoading: true },
+  { id: 'moonshot/kimi-k2.5-thinking', name: 'Kimi K2.5 Thinking', provider: 'moonshot', description: 'Extended chain-of-thought processing', isPremium: true, thinkingOnly: true, supportsThinkingTrace: true, smartLoading: true },
+  { id: 'zhipu/glm-5', name: 'GLM 5', provider: 'zhipu', description: 'Advanced bilingual language model', isPremium: true, smartLoading: true },
+];
+
+const SMART_MODEL_LOADING_PHRASES = [
+  'Mapping the problem space',
+  'Running a deeper reasoning pass',
+  'Pressure-testing candidate answers',
+  'Cross-checking the final response',
 ];
 
 const ProviderIcon = ({ provider, isActive }: { provider: string, isActive: boolean }) => {
@@ -536,6 +553,8 @@ interface BranchMiniChatProps {
   uniqueMsgId: string;
   branchNode?: ChatNode;
   isGeneratingThisNode?: boolean;
+  loadingPhrase?: string | null;
+  showSmartLoading?: boolean;
   title?: string;
   onSendMessage?: (text: string, files: File[]) => void;
   onGoToNode?: () => void;
@@ -571,8 +590,64 @@ const MiniMarkdown: React.FC<{ content: string }> = ({ content }) => {
   );
 };
 
+const ThinkingTracePanel: React.FC<{
+  trace?: string;
+  messageId: string;
+  isStreaming?: boolean;
+  compact?: boolean;
+}> = ({ trace, messageId, isStreaming = false, compact = false }) => {
+  const [isExpanded, setIsExpanded] = useState(isStreaming);
+
+  useEffect(() => {
+    if (isStreaming) {
+      setIsExpanded(true);
+    }
+  }, [isStreaming, messageId]);
+
+  if (!trace?.trim()) {
+    return null;
+  }
+
+  return (
+    <div className={`mb-3 rounded-2xl border border-zinc-200/60 bg-zinc-50/50 overflow-hidden ${compact ? 'mb-2 rounded-xl' : ''}`}>
+      <button
+        type="button"
+        onClick={() => setIsExpanded((prev) => !prev)}
+        className={`w-full flex items-center justify-between gap-3 px-3 py-2 text-left transition-colors hover:bg-zinc-100/50 ${compact ? 'px-2.5 py-1.5' : ''}`}
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          <div className={`rounded-full bg-zinc-200 text-zinc-500 flex items-center justify-center ${compact ? 'w-6 h-6' : 'w-7 h-7'}`}>
+            <svg className={`${isStreaming ? 'animate-pulse' : ''} ${compact ? 'w-3.5 h-3.5' : 'w-4 h-4'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+          </div>
+          <div className="min-w-0">
+            <p className={`font-semibold text-zinc-700 ${compact ? 'text-[10px]' : 'text-xs uppercase tracking-[0.16em]'}`}>
+              {isStreaming ? 'Thinking...' : 'Thought'}
+            </p>
+            {!compact && (
+              <p className="text-zinc-500/80 truncate text-[10px]">
+                {isStreaming ? 'Analyzing and reasoning' : 'Click to inspect the model trace'}
+              </p>
+            )}
+          </div>
+        </div>
+        <svg className={`shrink-0 text-zinc-400 transition-transform ${isExpanded ? 'rotate-180' : ''} ${compact ? 'w-3.5 h-3.5' : 'w-4 h-4'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      {isExpanded && (
+        <div className={`border-t border-zinc-200/60 bg-white/40 ${compact ? 'px-2.5 py-2' : 'px-4 py-3'}`}>
+          <MiniMarkdown content={trace} />
+        </div>
+      )}
+    </div>
+  );
+};
+
 const BranchMiniChat: React.FC<BranchMiniChatProps> = ({
-  line, uniqueMsgId, branchNode, isGeneratingThisNode, title, onSendMessage, onGoToNode, onStopGeneration, containerRef, scrollRef
+  line, uniqueMsgId, branchNode, isGeneratingThisNode, loadingPhrase, showSmartLoading, title, onSendMessage, onGoToNode, onStopGeneration, containerRef, scrollRef
 }) => {
   // Position in pixels relative to the container element
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
@@ -737,6 +812,16 @@ const BranchMiniChat: React.FC<BranchMiniChatProps> = ({
             </div>
           </div>
 
+          {!collapsed && isGeneratingThisNode && showSmartLoading && loadingPhrase && (
+            <div className="px-3 py-2 border-b border-[var(--border-color)] bg-zinc-50/60 flex items-center gap-2 text-[10px] text-zinc-500">
+              <svg className="w-3 h-3 animate-spin shrink-0" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+              </svg>
+              <span className="truncate">{loadingPhrase}</span>
+            </div>
+          )}
+
           {!collapsed && (
             <div className="flex-1 flex flex-col min-h-0 relative">
               {/* Vertical connection line inside chat area */}
@@ -752,18 +837,30 @@ const BranchMiniChat: React.FC<BranchMiniChatProps> = ({
                       ? 'px-2.5 py-1.5 rounded-xl bg-[var(--card-bg)] border border-[var(--border-color)] text-[var(--app-text)] rounded-tr-none text-[11px] shadow-sm'
                       : 'bg-transparent text-[var(--app-text)] pl-6 py-1 text-[11px] leading-relaxed w-full'
                       }`}>
+                      {msg.role === 'model' && (
+                        <ThinkingTracePanel
+                          trace={msg.thinkingTrace}
+                          messageId={`${uniqueMsgId}-branch-${i}`}
+                          compact
+                          isStreaming={Boolean(isGeneratingThisNode && i === messages.length - 1 && msg.thinkingTrace)}
+                        />
+                      )}
                       {msg.role === 'user' ? msg.content : (
                         msg.content
                           ? <MiniMarkdown content={msg.content} />
                           : isGeneratingThisNode && i === messages.length - 1
-                            ? <div className="flex gap-1 py-1"><div className="w-1 h-1 bg-zinc-300 rounded-full animate-bounce" /><div className="w-1 h-1 bg-zinc-300 rounded-full animate-bounce [animation-delay:0.2s]" /><div className="w-1 h-1 bg-zinc-300 rounded-full animate-bounce [animation-delay:0.4s]" /></div>
+                            ? showSmartLoading && loadingPhrase
+                              ? <p className="py-1 text-[10px] uppercase tracking-[0.14em] text-zinc-500/80">{loadingPhrase}</p>
+                              : <div className="flex gap-1 py-1"><div className="w-1 h-1 bg-zinc-300 rounded-full animate-bounce" /><div className="w-1 h-1 bg-zinc-300 rounded-full animate-bounce [animation-delay:0.2s]" /><div className="w-1 h-1 bg-zinc-300 rounded-full animate-bounce [animation-delay:0.4s]" /></div>
                             : null
                       )}
                     </div>
                   </div>
                 ))}
                 {isGeneratingThisNode && messages.length === 0 && (
-                  <div className="flex gap-1 py-1 relative z-10 pl-6"><div className="w-1 h-1 bg-blue-300 rounded-full animate-bounce" /><div className="w-1 h-1 bg-blue-300 rounded-full animate-bounce [animation-delay:0.2s]" /><div className="w-1 h-1 bg-blue-300 rounded-full animate-bounce [animation-delay:0.4s]" /></div>
+                  showSmartLoading && loadingPhrase
+                    ? <div className="py-1 relative z-10 pl-6 text-[10px] uppercase tracking-[0.14em] text-zinc-500/80">{loadingPhrase}</div>
+                    : <div className="flex gap-1 py-1 relative z-10 pl-6"><div className="w-1 h-1 bg-blue-300 rounded-full animate-bounce" /><div className="w-1 h-1 bg-blue-300 rounded-full animate-bounce [animation-delay:0.2s]" /><div className="w-1 h-1 bg-blue-300 rounded-full animate-bounce [animation-delay:0.4s]" /></div>
                 )}
                 <div ref={messagesEndRef} />
               </div>
@@ -839,12 +936,13 @@ export const ChatView: React.FC<ChatViewProps> = ({
 
   // Track where the submit came from — only scroll to bottom for 'main'
   const [loadingSource, setLoadingSource] = useState<'main' | 'branch'>('main');
+  const [isThinking, setIsThinking] = useState(false);
 
   // 2. ADD THIS: Wrap the branch submit so it flags the source as 'branch'
   const handleBranchMessage = useCallback((text: string, files: File[], metadata?: BranchMetadata) => {
     setLoadingSource('branch');
-    if (onSendMessage) onSendMessage(text, files, metadata);
-  }, [onSendMessage]);
+    if (onSendMessage) onSendMessage(text, files, metadata, isThinking);
+  }, [isThinking, onSendMessage]);
 
   const {
     cursor, activeBranch, composerRef, zoneRef,
@@ -866,6 +964,29 @@ export const ChatView: React.FC<ChatViewProps> = ({
       return matchesProvider && matchesSearch;
     });
   }, [selectedProviderTab, modelSearchQuery]);
+
+  const selectedModelConfig = useMemo(
+    () => MODELS.find((model) => model.id === selectedModel),
+    [selectedModel]
+  );
+  const shouldShowSmartLoading = Boolean(isGenerating && selectedModelConfig?.smartLoading);
+  const [loadingPhraseIndex, setLoadingPhraseIndex] = useState(0);
+  const loadingPhrase = shouldShowSmartLoading
+    ? SMART_MODEL_LOADING_PHRASES[loadingPhraseIndex % SMART_MODEL_LOADING_PHRASES.length]
+    : null;
+
+  useEffect(() => {
+    if (!shouldShowSmartLoading) {
+      setLoadingPhraseIndex(0);
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      setLoadingPhraseIndex((prev) => (prev + 1) % SMART_MODEL_LOADING_PHRASES.length);
+    }, 2200);
+
+    return () => window.clearInterval(intervalId);
+  }, [shouldShowSmartLoading, selectedModel]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -976,15 +1097,10 @@ export const ChatView: React.FC<ChatViewProps> = ({
     }
   };
 
-  const [isThinking, setIsThinking] = useState(false);
-
   // Sync isThinking with model constraints
   useEffect(() => {
-    const modelObj = MODELS.find(m => m.id === selectedModel);
-    if (modelObj?.thinkingOnly) {
-      setIsThinking(true);
-    }
-  }, [selectedModel]);
+    setIsThinking(Boolean(selectedModelConfig?.thinkingOnly || selectedModelConfig?.supportsThinkingTrace));
+  }, [selectedModelConfig]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1061,6 +1177,13 @@ export const ChatView: React.FC<ChatViewProps> = ({
           <div className="max-w-3xl mx-auto px-6 pt-8 pb-12 space-y-8 relative" ref={contentRef}>
             {allMessages.map(({ msg, nodeId }, idx) => {
               const uniqueMsgId = `${nodeId}-${idx}`;
+              const isStreamingMessage = Boolean(
+                msg.role === 'model' &&
+                isGenerating &&
+                generatingNodeId === nodeId &&
+                idx === allMessages.length - 1 &&
+                msg.thinkingTrace
+              );
 
               return (
                 <div
@@ -1072,6 +1195,13 @@ export const ChatView: React.FC<ChatViewProps> = ({
                 >
                   <div className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'} max-w-full`}>
                     <div className={`max-w-full px-5 py-3 rounded-2xl relative transition-all duration-300 ${msg.role === 'user' ? 'bg-[#f4f4f4] text-zinc-900 border border-zinc-200' : 'bg-transparent text-zinc-800 pl-0'}`}>
+                      {msg.role === 'model' && (
+                        <ThinkingTracePanel
+                          trace={msg.thinkingTrace}
+                          messageId={uniqueMsgId}
+                          isStreaming={isStreamingMessage}
+                        />
+                      )}
 
                       <div className="md-content relative z-10">
                         <ReactMarkdown components={{
@@ -1166,14 +1296,24 @@ export const ChatView: React.FC<ChatViewProps> = ({
               />
             )}
 
-            {/* ONLY show this spinner if the request came from the main input */}
-            {isGenerating && loadingSource === 'main' && (
-              <div className="flex justify-start pl-8 py-2 animate-in fade-in duration-300">
-                <svg className="w-6 h-6 animate-spin text-blue-500" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                </svg>
-              </div>
-            )}
+            {/* ONLY show this spinner if the request came from the main input and model hasn't started replying */}
+            {isGenerating && loadingSource === 'main' && allMessages.length > 0 &&
+              allMessages[allMessages.length - 1].msg.role === 'model' &&
+              !allMessages[allMessages.length - 1].msg.content.trim() && (
+                <div className="flex justify-start pl-0 py-2 animate-in fade-in duration-300">
+                  <div className="inline-flex items-center gap-3 rounded-2xl border border-zinc-200/60 bg-white/80 px-4 py-2 shadow-sm">
+                    <svg className="w-5 h-5 animate-spin text-blue-500 shrink-0" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    {loadingPhrase ? (
+                      <span className="text-sm text-zinc-600/90">{loadingPhrase}</span>
+                    ) : (
+                      <span className="text-sm text-[var(--app-text-muted)]">Generating response</span>
+                    )}
+                  </div>
+                </div>
+              )}
             {/* Mini chat overlays moved inside max-w-3xl container */}
             {branchLines
               .filter(line => historyMessageIds.has(line.messageId) && line.targetNodeId !== currentNodeId)
@@ -1189,6 +1329,8 @@ export const ChatView: React.FC<ChatViewProps> = ({
                     uniqueMsgId={line.messageId}
                     branchNode={branchNode}
                     isGeneratingThisNode={isGeneratingThisNode}
+                    loadingPhrase={loadingPhrase}
+                    showSmartLoading={Boolean(selectedModelConfig?.smartLoading)}
                     title={displayTitle}
                     containerRef={contentRef}
                     scrollRef={scrollRef}
@@ -1288,6 +1430,16 @@ export const ChatView: React.FC<ChatViewProps> = ({
                 }}
               />
 
+              {shouldShowSmartLoading && loadingPhrase && (
+                <div className="flex items-center gap-2 px-2 py-1 text-[11px] text-zinc-500/90">
+                  <svg className="w-3.5 h-3.5 animate-spin shrink-0" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  <span className="truncate">{loadingPhrase}</span>
+                </div>
+              )}
+
               <div className="flex items-center justify-between relative">
                 <div className="flex items-center gap-2" ref={modelMenuRef}>
                   <button
@@ -1307,7 +1459,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
                     onClick={() => setIsModelMenuOpen(!isModelMenuOpen)}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold text-zinc-500 hover:text-zinc-900 hover:bg-zinc-200/50 transition-all group"
                   >
-                    <span>{MODELS.find(m => m.id === selectedModel)?.name || 'Select Model'}</span>
+                    <span>{selectedModelConfig?.name || 'Select Model'}</span>
                     <svg className={`w-3.5 h-3.5 transition-transform ${isModelMenuOpen ? 'rotate-180 text-zinc-900' : 'text-zinc-400 group-hover:text-zinc-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l4-4 4 4m0 6l-4 4-4-4" /></svg>
                   </button>
 
@@ -1391,6 +1543,11 @@ export const ChatView: React.FC<ChatViewProps> = ({
                                     {model.isPremium && (
                                       <div className="flex items-center gap-1 bg-blue-50 border border-blue-100 rounded text-blue-600 px-1 py-0.5">
                                         <svg className="w-2.5 h-2.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L2 12L12 22L22 12L12 2Z" /></svg>
+                                      </div>
+                                    )}
+                                    {model.supportsThinkingTrace && (
+                                      <div className="rounded bg-zinc-100 border border-zinc-200 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-zinc-500">
+                                        Trace
                                       </div>
                                     )}
                                     {selectedModel === model.id && (

@@ -24,6 +24,76 @@ const isImageFile = (file: File): boolean => {
 import { API_BASE_URL } from './frontendConfig';
 import { supabase } from './supabaseClient';
 
+export interface ResponseStreamDelta {
+  text?: string;
+  reasoning?: string;
+}
+
+const collectTextFragments = (value: any): string[] => {
+  if (!value) return [];
+
+  if (typeof value === 'string') {
+    return value ? [value] : [];
+  }
+
+  if (Array.isArray(value)) {
+    return value.flatMap(collectTextFragments);
+  }
+
+  if (typeof value === 'object') {
+    if (typeof value.text === 'string') {
+      return value.text ? [value.text] : [];
+    }
+
+    if (typeof value.content === 'string') {
+      return value.content ? [value.content] : [];
+    }
+
+    if (Array.isArray(value.content)) {
+      return value.content.flatMap(collectTextFragments);
+    }
+
+    if (value.summary) {
+      return collectTextFragments(value.summary);
+    }
+
+    if (value.part) {
+      return collectTextFragments(value.part);
+    }
+  }
+
+  return [];
+};
+
+const extractResponseDeltas = (payload: any): ResponseStreamDelta[] => {
+  const deltas: ResponseStreamDelta[] = [];
+
+  if (payload?.type === 'response.output_text.delta' && typeof payload.delta === 'string') {
+    deltas.push({ text: payload.delta });
+  }
+
+  if (
+    (payload?.type === 'response.reasoning_text.delta' ||
+      payload?.type === 'response.reasoning_summary_text.delta') &&
+    typeof payload.delta === 'string'
+  ) {
+    deltas.push({ reasoning: payload.delta });
+  }
+
+  const choice = payload?.choices?.[0];
+  const choiceDelta = choice?.delta ?? choice?.message ?? payload?.delta;
+
+  if (choiceDelta) {
+    collectTextFragments(choiceDelta.content).forEach((text) => deltas.push({ text }));
+    collectTextFragments(choiceDelta.reasoning).forEach((reasoning) => deltas.push({ reasoning }));
+    collectTextFragments(choiceDelta.reasoning_content).forEach((reasoning) => deltas.push({ reasoning }));
+    collectTextFragments(choiceDelta.reasoningDetails).forEach((reasoning) => deltas.push({ reasoning }));
+    collectTextFragments(choiceDelta.reasoning_details).forEach((reasoning) => deltas.push({ reasoning }));
+  }
+
+  return deltas;
+};
+
 export const generateResponse = async (
   prompt: string,
   history: { role: 'user' | 'assistant'; content: string }[],
@@ -63,54 +133,108 @@ export const generateResponse = async (
     const { data: { session } } = await supabase.auth.getSession();
     const token = session?.access_token;
 
-    const requestBody: any = { model: modelId, messages, stream: true };
-    if (thinking) {
-      requestBody.include_reasoning = true;
-      // Some providers use reasoning_effort
-      requestBody.provider = { include_reasoning: true };
+    const sendChatRequest = async (requestBody: any) => {
+      return fetch(`${API_BASE_URL}/api/openrouter/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(requestBody),
+      });
+    };
+
+    const baseRequestBody: any = { model: modelId, messages, stream: true };
+    const fullReasoningBody = {
+      ...baseRequestBody,
+      include_reasoning: true,
+      reasoning: { effort: 'medium', summary: 'auto' }
+    };
+    const lightReasoningBody = {
+      ...baseRequestBody,
+      include_reasoning: true
+    };
+
+    let response = await sendChatRequest(thinking ? fullReasoningBody : baseRequestBody);
+    if (!response.ok && thinking && response.status === 400) {
+      console.warn(`OpenRouter rejected detailed reasoning params for ${modelId}. Retrying with include_reasoning only.`);
+      response = await sendChatRequest(lightReasoningBody);
     }
 
-    const response = await fetch(`${API_BASE_URL}/api/openrouter/chat`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify(requestBody),
-    });
+    if (!response.ok && thinking && response.status === 400) {
+      console.warn(`OpenRouter rejected reasoning params for ${modelId}. Retrying without reasoning traces.`);
+      response = await sendChatRequest(baseRequestBody);
+    }
 
-    if (!response.ok) throw new Error(`Proxy Error: ${response.status}`);
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => '');
+      throw new Error(`Proxy Error: ${response.status}${errorText ? ` - ${errorText}` : ''}`);
+    }
 
     const reader = response.body?.getReader();
     const decoder = new TextDecoder();
+    let streamConsumed = false;
 
     return {
-      getTextStream: async function* () {
+      getDeltaStream: async function* () {
         if (!reader) return;
+        if (streamConsumed) {
+          throw new Error('OpenRouter stream has already been consumed.');
+        }
+
+        streamConsumed = true;
+        let buffer = '';
+
+        const processEventBlock = (eventBlock: string): ResponseStreamDelta[] => {
+          const data = eventBlock
+            .split(/\r?\n/)
+            .filter((line) => line.startsWith('data:'))
+            .map((line) => line.slice(5).trimStart())
+            .join('\n')
+            .trim();
+
+          if (!data || data === '[DONE]') {
+            return [];
+          }
+
+          try {
+            return extractResponseDeltas(JSON.parse(data));
+          } catch {
+            return [];
+          }
+        };
+
         try {
           while (true) {
             const { done, value } = await reader.read();
-            if (done) break;
+            buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
 
-            const chunk = decoder.decode(value);
-            const lines = chunk.split('\n');
+            const eventBlocks = buffer.split(/\r?\n\r?\n/);
+            buffer = eventBlocks.pop() ?? '';
 
-            for (const line of lines) {
-              if (line.startsWith('data: ')) {
-                const data = line.slice(6);
-                if (data.trim() === '[DONE]') break;
-                try {
-                  const json = JSON.parse(data);
-                  const content = json.choices?.[0]?.delta?.content;
-                  if (content) yield content;
-                } catch (e) {
-                  // Ignore parse errors for incomplete JSON
-                }
+            for (const eventBlock of eventBlocks) {
+              for (const delta of processEventBlock(eventBlock)) {
+                yield delta;
               }
+            }
+
+            if (done) {
+              break;
+            }
+          }
+
+          if (buffer.trim()) {
+            for (const delta of processEventBlock(buffer)) {
+              yield delta;
             }
           }
         } finally {
           reader.releaseLock();
+        }
+      },
+      getTextStream: async function* () {
+        for await (const delta of this.getDeltaStream()) {
+          if (delta.text) yield delta.text;
         }
       },
       cancel: () => reader?.cancel()

@@ -2,6 +2,7 @@ import { supabase } from './supabaseClient';
 import { ChatNode, Message } from '../types';
 import { BranchMetadata } from '../components/ChatView';
 import { API_BASE_URL } from './frontendConfig';
+import { decodeMessageContent, encodeMessageContent } from './messageContent';
 
 /**
  * Helper to get the current user's session token for backend proxy calls
@@ -84,13 +85,17 @@ export const dbService = {
         isBranch: n.is_branch,
         messages: msgsData
           .filter((m: any) => m.nodes_id === n.id)
-          .map((m: any) => ({
-            id: m.id,
-            role: m.role as 'user' | 'model',
-            content: m.content,
-            timestamp: new Date(m.created_at).getTime(),
-            ordinal: m.ordinal
-          })),
+          .map((m: any) => {
+            const decodedContent = decodeMessageContent(m.content);
+            return {
+              id: m.id,
+              role: m.role as 'user' | 'model',
+              content: decodedContent.content,
+              thinkingTrace: decodedContent.thinkingTrace,
+              timestamp: new Date(m.created_at).getTime(),
+              ordinal: m.ordinal
+            };
+          }),
         childrenIds: nodesData
           .filter((child: any) => child.parent_id === n.id)
           .map((child: any) => child.id),
@@ -145,10 +150,19 @@ export const dbService = {
   },
 
   async createMessage(payload: any) {
+    const { thinkingTrace, ...restPayload } = payload;
+    const encodedPayload = {
+      ...restPayload,
+      content: encodeMessageContent({
+        content: payload.content ?? '',
+        thinkingTrace
+      })
+    };
+
     const response = await fetch(`${API_BASE_URL}/api/db/messages`, {
       method: 'POST',
       headers: await getAuthHeaders(),
-      body: JSON.stringify(payload)
+      body: JSON.stringify(encodedPayload)
     });
     if (!response.ok) throw new Error('Failed to create message');
     return response.json();
