@@ -3,10 +3,15 @@
  * Represents a single message in a conversation.
  */
 export interface Message {
+  id?: string;
   role: 'user' | 'model';
   content: string;
   thinkingTrace?: string;
   timestamp: number;
+  ioTokens?: number;
+  cost?: number;
+  model?: string;
+  provider?: string;
   /**
    * Position within the node (0 = first, 1 = second, etc.)
    * This is critical for database sorting.

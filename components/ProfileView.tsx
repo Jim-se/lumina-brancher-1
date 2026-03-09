@@ -1,10 +1,5 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabaseClient';
-
-export const goPro = () => {
-    window.location.href = "https://buy.stripe.com/00w9AVbsA88M9438lC1Nu01";
-};
 
 export const handleLogout = async () => {
     if (confirm("Are you sure you want to log out?")) {
@@ -79,13 +74,9 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ fullName, email, creat
 
                     {/* Actions */}
                     <div className="space-y-4 pt-6 border-t border-[var(--border-color)]">
-                        <div className="flex gap-4">
-                            <button onClick={goPro}
-                                className="flex-1 py-4 px-6 bg-[var(--accent-color)] hover:opacity-90 text-white font-bold rounded-2xl transition-all shadow-lg active:scale-[0.98]">
-                                Upgrade to Pro
-                            </button>
+                        <div className="flex">
                             <button onClick={handleLogout}
-                                className="flex-1 py-4 px-6 bg-[var(--card-bg)] hover:bg-red-500/10 text-red-500 font-bold rounded-2xl transition-all border border-red-500/20 active:scale-[0.98]">
+                                className="w-full py-4 px-6 bg-[var(--card-bg)] hover:bg-red-500/10 text-red-500 font-bold rounded-2xl transition-all border border-red-500/20 active:scale-[0.98]">
                                 Log Out
                             </button>
                         </div>

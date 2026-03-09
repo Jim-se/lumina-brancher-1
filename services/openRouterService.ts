@@ -29,6 +29,21 @@ export interface ResponseStreamDelta {
   reasoning?: string;
 }
 
+export interface ResponseUsage {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+}
+
+const toSafeTokenCount = (value: any): number => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return 0;
+  }
+
+  return Math.round(parsed);
+};
+
 const collectTextFragments = (value: any): string[] => {
   if (!value) return [];
 
@@ -94,6 +109,45 @@ const extractResponseDeltas = (payload: any): ResponseStreamDelta[] => {
   return deltas;
 };
 
+const extractResponseUsage = (payload: any): ResponseUsage | null => {
+  const usage = payload?.usage;
+  if (!usage || typeof usage !== 'object') {
+    return null;
+  }
+
+  const hasUsageFields = [
+    'prompt_tokens',
+    'completion_tokens',
+    'total_tokens',
+    'input_tokens',
+    'output_tokens',
+    'promptTokens',
+    'completionTokens',
+    'totalTokens',
+    'inputTokens',
+    'outputTokens'
+  ].some((field) => field in usage);
+
+  if (!hasUsageFields) {
+    return null;
+  }
+
+  const inputTokens = toSafeTokenCount(
+    usage.prompt_tokens ?? usage.input_tokens ?? usage.promptTokens ?? usage.inputTokens
+  );
+  const outputTokens = toSafeTokenCount(
+    usage.completion_tokens ?? usage.output_tokens ?? usage.completionTokens ?? usage.outputTokens
+  );
+
+  return {
+    inputTokens,
+    outputTokens,
+    totalTokens: toSafeTokenCount(
+      usage.total_tokens ?? usage.totalTokens ?? inputTokens + outputTokens
+    ),
+  };
+};
+
 export const generateResponse = async (
   prompt: string,
   history: { role: 'user' | 'assistant'; content: string }[],
@@ -144,7 +198,12 @@ export const generateResponse = async (
       });
     };
 
-    const baseRequestBody: any = { model: modelId, messages, stream: true };
+    const baseRequestBody: any = {
+      model: modelId,
+      messages,
+      stream: true,
+      stream_options: { include_usage: true }
+    };
     const fullReasoningBody = {
       ...baseRequestBody,
       include_reasoning: true,
@@ -174,6 +233,7 @@ export const generateResponse = async (
     const reader = response.body?.getReader();
     const decoder = new TextDecoder();
     let streamConsumed = false;
+    let latestUsage: ResponseUsage | null = null;
 
     return {
       getDeltaStream: async function* () {
@@ -185,7 +245,7 @@ export const generateResponse = async (
         streamConsumed = true;
         let buffer = '';
 
-        const processEventBlock = (eventBlock: string): ResponseStreamDelta[] => {
+        const processEventBlock = (eventBlock: string): { deltas: ResponseStreamDelta[]; usage: ResponseUsage | null } => {
           const data = eventBlock
             .split(/\r?\n/)
             .filter((line) => line.startsWith('data:'))
@@ -194,13 +254,17 @@ export const generateResponse = async (
             .trim();
 
           if (!data || data === '[DONE]') {
-            return [];
+            return { deltas: [], usage: null };
           }
 
           try {
-            return extractResponseDeltas(JSON.parse(data));
+            const parsed = JSON.parse(data);
+            return {
+              deltas: extractResponseDeltas(parsed),
+              usage: extractResponseUsage(parsed)
+            };
           } catch {
-            return [];
+            return { deltas: [], usage: null };
           }
         };
 
@@ -213,7 +277,12 @@ export const generateResponse = async (
             buffer = eventBlocks.pop() ?? '';
 
             for (const eventBlock of eventBlocks) {
-              for (const delta of processEventBlock(eventBlock)) {
+              const { deltas, usage } = processEventBlock(eventBlock);
+              if (usage) {
+                latestUsage = usage;
+              }
+
+              for (const delta of deltas) {
                 yield delta;
               }
             }
@@ -224,7 +293,12 @@ export const generateResponse = async (
           }
 
           if (buffer.trim()) {
-            for (const delta of processEventBlock(buffer)) {
+            const { deltas, usage } = processEventBlock(buffer);
+            if (usage) {
+              latestUsage = usage;
+            }
+
+            for (const delta of deltas) {
               yield delta;
             }
           }
@@ -237,6 +311,7 @@ export const generateResponse = async (
           if (delta.text) yield delta.text;
         }
       },
+      getUsage: () => latestUsage,
       cancel: () => reader?.cancel()
     };
 

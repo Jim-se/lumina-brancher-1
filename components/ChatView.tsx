@@ -5,6 +5,7 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneLight, vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { useTheme } from '../src/contexts/ThemeContext';
 import DOMPurify from 'dompurify';
+import { AttachmentPreviewStrip } from './AttachmentPreviewStrip';
 export interface BranchMetadata {
   messageId: string;
   blockId: string;
@@ -132,14 +133,12 @@ const BranchComposer: React.FC<BranchComposerProps & { composerRef: React.RefObj
 
           {/* File Previews */}
           {files.length > 0 && (
-            <div className="flex gap-2 pb-2 px-1 overflow-x-auto custom-scrollbar relative z-10">
-              {files.map((file, i) => (
-                <div key={i} className="flex items-center gap-1.5 bg-[var(--sidebar-bg)] rounded-lg px-2 py-1 text-[10px] text-[var(--app-text-muted)] border border-[var(--border-color)] shrink-0">
-                  <span className="truncate max-w-[100px]">{file.name}</span>
-                  <button type="button" onClick={() => removeFile(i)} className="hover:text-red-500 transition-colors">✕</button>
-                </div>
-              ))}
-            </div>
+            <AttachmentPreviewStrip
+              files={files}
+              onRemove={removeFile}
+              density="compact"
+              className="pb-2 px-1 relative z-10"
+            />
           )}
 
           {/* Top Row: Input & Actions */}
@@ -1383,20 +1382,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
           <div className="flex flex-col gap-0 bg-[var(--card-bg)] border border-[var(--border-color)] rounded-[2rem] p-0.5 transition-all shadow-sm focus-within:border-zinc-400 focus-within:shadow-md">
 
             {files.length > 0 && (
-              <div className="w-full flex gap-2 px-4 pt-4 overflow-x-auto custom-scrollbar">
-                {files.map((file, i) => (
-                  <div key={i} className="flex items-center gap-2 bg-zinc-50 rounded-lg px-3 py-2 text-xs text-zinc-600 border border-zinc-100 shrink-0">
-                    <span className="truncate max-w-[150px]">{file.name}</span>
-                    <button
-                      type="button"
-                      onClick={() => removeFile(i)}
-                      className="hover:text-red-400 transition-colors"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                ))}
-              </div>
+              <AttachmentPreviewStrip files={files} onRemove={removeFile} className="px-4 pt-4" />
             )}
 
             <form onSubmit={handleSubmit} className="w-full flex flex-col gap-2 px-3 pb-3 pt-2 relative">
@@ -1463,24 +1449,6 @@ export const ChatView: React.FC<ChatViewProps> = ({
                     <svg className={`w-3.5 h-3.5 transition-transform ${isModelMenuOpen ? 'rotate-180 text-zinc-900' : 'text-zinc-400 group-hover:text-zinc-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l4-4 4 4m0 6l-4 4-4-4" /></svg>
                   </button>
 
-                  {/* Thinking Toggle 
-                  <div className="flex items-center gap-2 ml-1">
-                    <button
-                      type="button"
-                      disabled={MODELS.find(m => m.id === selectedModel)?.thinkingOnly}
-                      onClick={() => setIsThinking(!isThinking)}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border transition-all ${isThinking
-                        ? 'bg-amber-50 border-amber-200 text-amber-600 shadow-sm'
-                        : 'bg-transparent border-[var(--border-color)] text-[var(--app-text-muted)] hover:bg-[var(--sidebar-bg)]'
-                        }`}
-                    >
-                      <svg className={`w-3.5 h-3.5 ${isThinking ? 'animate-pulse' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                      </svg>
-                      <span className="text-[10px] font-bold uppercase tracking-wider">Thinking</span>
-                    </button>
-                  </div>
-                  */}
                   {isModelMenuOpen && (
                     <div className="absolute bottom-[calc(100%+16px)] left-0 w-[420px] max-h-[400px] bg-[var(--card-bg)] border border-[var(--border-color)] rounded-2xl flex overflow-hidden shadow-2xl z-50 animate-in fade-in slide-in-from-bottom-2 duration-200">
                       <div className="w-14 bg-[var(--sidebar-bg)] border-r border-[var(--border-color)] flex flex-col items-center py-3 gap-3">

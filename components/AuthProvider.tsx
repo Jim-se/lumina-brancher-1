@@ -1,10 +1,103 @@
 import React, { useEffect, useState } from 'react';
 import { supabase, initSupabase } from '../services/supabaseClient';
-import { Session } from '@supabase/supabase-js';
+import { Session, User } from '@supabase/supabase-js';
 
 interface AuthProviderProps {
   children: React.ReactNode;
 }
+
+const addOneMonth = (dateLike?: string) => {
+  const baseDate = dateLike ? new Date(dateLike) : new Date();
+  const safeDate = Number.isNaN(baseDate.getTime()) ? new Date() : baseDate;
+  const nextDate = new Date(safeDate);
+  nextDate.setMonth(nextDate.getMonth() + 1);
+  return nextDate;
+};
+
+const syncUserRecord = async (user: User) => {
+  const billingPeriodStart = user.created_at || new Date().toISOString();
+  const billingPeriodEnd = addOneMonth(billingPeriodStart).toISOString();
+
+  const { data: existing, error } = await supabase
+    .from('users')
+    .select('id, email, full_name, tier, billing_period_start, billing_period_end, total_requests, lifetime_cost, current_period_cost')
+    .eq('id', user.id)
+    .maybeSingle();
+
+  if (error) {
+    console.error('Error loading user profile:', error);
+    return;
+  }
+
+  if (!existing) {
+    const { error: insertError } = await supabase
+      .from('users')
+      .insert({
+        id: user.id,
+        email: user.email ?? null,
+        full_name: user.user_metadata?.full_name ?? null,
+        tier: 'FREE',
+        billing_period_start: billingPeriodStart,
+        billing_period_end: billingPeriodEnd,
+        total_requests: 0,
+        lifetime_cost: 0,
+        current_period_cost: 0,
+      });
+
+    if (insertError) {
+      console.error('Error creating user profile:', insertError);
+    }
+
+    return;
+  }
+
+  const updates: Record<string, any> = {};
+
+  if (user.email && existing.email !== user.email) {
+    updates.email = user.email;
+  }
+
+  if (!existing.full_name && user.user_metadata?.full_name) {
+    updates.full_name = user.user_metadata.full_name;
+  }
+
+  if (existing.tier !== 'FREE') {
+    updates.tier = 'FREE';
+  }
+
+  if (!existing.billing_period_start) {
+    updates.billing_period_start = billingPeriodStart;
+  }
+
+  if (!existing.billing_period_end) {
+    updates.billing_period_end = billingPeriodEnd;
+  }
+
+  if (existing.total_requests == null) {
+    updates.total_requests = 0;
+  }
+
+  if (existing.lifetime_cost == null) {
+    updates.lifetime_cost = 0;
+  }
+
+  if (existing.current_period_cost == null) {
+    updates.current_period_cost = 0;
+  }
+
+  if (Object.keys(updates).length === 0) {
+    return;
+  }
+
+  const { error: updateError } = await supabase
+    .from('users')
+    .update(updates)
+    .eq('id', user.id);
+
+  if (updateError) {
+    console.error('Error updating user profile:', updateError);
+  }
+};
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [session, setSession] = useState<Session | null>(null);
@@ -17,6 +110,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
         // Get initial session
         const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+          await syncUserRecord(session.user);
+        }
         setSession(session);
         setLoading(false);
 
@@ -24,6 +120,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         const {
           data: { subscription },
         } = supabase.auth.onAuthStateChange((_event, session) => {
+          if (session?.user) {
+            syncUserRecord(session.user).catch((err) => {
+              console.error('Failed to sync user record:', err);
+            });
+          }
           setSession(session);
         });
 
@@ -116,20 +217,13 @@ const Auth: React.FC = () => {
 
         // 3. Handle the public.users table safely
         if (data.user) {
-          // We use UPSERT instead of INSERT.
-          // This fixes the 409 error by updating the row if the Trigger already created it.
-          const { error: dbError } = await supabase
-            .from('users')
-            .upsert({
-              id: data.user.id,
-              full_name: fullName,
-              // Add other fields here if needed, e.g. avatar_url: '',
-            });
-
-          if (dbError) {
-            // Optional: Log this error, but don't block the user since Auth succeeded
-            console.error('Error saving user details:', dbError);
-          }
+          await syncUserRecord({
+            ...data.user,
+            user_metadata: {
+              ...data.user.user_metadata,
+              full_name: fullName || data.user.user_metadata?.full_name,
+            },
+          });
         }
 
         setMessage('Check your email for the confirmation link!');

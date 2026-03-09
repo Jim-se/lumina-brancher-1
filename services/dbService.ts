@@ -87,13 +87,19 @@ export const dbService = {
           .filter((m: any) => m.nodes_id === n.id)
           .map((m: any) => {
             const decodedContent = decodeMessageContent(m.content);
+            const parsedCost = m.cost == null ? undefined : Number(m.cost);
+            const parsedIoTokens = m.i_o_tokens == null ? undefined : Number(m.i_o_tokens);
             return {
               id: m.id,
               role: m.role as 'user' | 'model',
               content: decodedContent.content,
               thinkingTrace: decodedContent.thinkingTrace,
               timestamp: new Date(m.created_at).getTime(),
-              ordinal: m.ordinal
+              ordinal: m.ordinal,
+              ioTokens: Number.isFinite(parsedIoTokens) ? parsedIoTokens : undefined,
+              cost: Number.isFinite(parsedCost) ? parsedCost : undefined,
+              model: typeof m.model === 'string' ? m.model : undefined,
+              provider: typeof m.provider === 'string' ? m.provider : undefined
             };
           }),
         childrenIds: nodesData
@@ -165,6 +171,49 @@ export const dbService = {
       body: JSON.stringify(encodedPayload)
     });
     if (!response.ok) throw new Error('Failed to create message');
+    return response.json();
+  },
+
+  async saveCompletedTurn(payload: {
+    nodes_id: string;
+    model: string;
+    input_tokens?: number;
+    output_tokens?: number;
+    user_message: {
+      content: string;
+      ordinal: number;
+    };
+    model_message: {
+      content: string;
+      thinkingTrace?: string;
+      ordinal: number;
+    };
+  }) {
+    const response = await fetch(`${API_BASE_URL}/api/db/messages/complete-turn`, {
+      method: 'POST',
+      headers: await getAuthHeaders(),
+      body: JSON.stringify({
+        nodes_id: payload.nodes_id,
+        model: payload.model,
+        input_tokens: payload.input_tokens ?? 0,
+        output_tokens: payload.output_tokens ?? 0,
+        user_message: {
+          ordinal: payload.user_message.ordinal,
+          content: encodeMessageContent({
+            content: payload.user_message.content ?? ''
+          })
+        },
+        model_message: {
+          ordinal: payload.model_message.ordinal,
+          content: encodeMessageContent({
+            content: payload.model_message.content ?? '',
+            thinkingTrace: payload.model_message.thinkingTrace
+          })
+        }
+      })
+    });
+
+    if (!response.ok) throw new Error('Failed to save completed turn');
     return response.json();
   },
 

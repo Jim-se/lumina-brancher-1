@@ -493,6 +493,7 @@ const App: React.FC = () => {
       setIsGenerating(false);
       setGeneratingNodeId(null);
       generationRef.current = null;
+      const usage = result.getUsage?.();
 
       // ... (Continue to 5. DATABASE SYNC as before) ...
 
@@ -525,20 +526,21 @@ const App: React.FC = () => {
         });
       }
 
-      // Save Messages
-      await dbService.createMessage({
+      // Save Messages + usage accounting
+      await dbService.saveCompletedTurn({
         nodes_id: targetNodeId,
-        role: 'user',
-        content: text,
-        ordinal: userMsg.ordinal
-      });
-
-      await dbService.createMessage({
-        nodes_id: targetNodeId,
-        role: 'model',
-        content: fullResponse,
-        thinkingTrace,
-        ordinal: aiMsg.ordinal
+        model: selectedModel,
+        input_tokens: usage?.inputTokens ?? 0,
+        output_tokens: usage?.outputTokens ?? 0,
+        user_message: {
+          content: text,
+          ordinal: userMsg.ordinal
+        },
+        model_message: {
+          content: fullResponse,
+          thinkingTrace,
+          ordinal: aiMsg.ordinal
+        }
       });
 
       // Update Pointers
@@ -698,10 +700,24 @@ const App: React.FC = () => {
       setIsGenerating(false);
       setGeneratingNodeId(null);
       generationRef.current = null;
+      const usage = result.getUsage?.();
 
-      // Save messages to DB
-      await dbService.createMessage({ nodes_id: targetNodeId, role: 'user', content: text, ordinal: userMsg.ordinal });
-      await dbService.createMessage({ nodes_id: targetNodeId, role: 'model', content: fullResponse, thinkingTrace, ordinal: aiMsg.ordinal });
+      // Save messages + usage accounting to DB
+      await dbService.saveCompletedTurn({
+        nodes_id: targetNodeId,
+        model: selectedModel,
+        input_tokens: usage?.inputTokens ?? 0,
+        output_tokens: usage?.outputTokens ?? 0,
+        user_message: {
+          content: text,
+          ordinal: userMsg.ordinal
+        },
+        model_message: {
+          content: fullResponse,
+          thinkingTrace,
+          ordinal: aiMsg.ordinal
+        }
+      });
 
       console.log(`✅ [BRANCH MINI CHAT] Total time: ${(performance.now() - perfStart).toFixed(0)}ms`);
     } catch (err: any) {
