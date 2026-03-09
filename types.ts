@@ -40,3 +40,9 @@ export interface ChatState {
   currentNodeId: string | null;
   viewMode: 'chat' | 'node';
 }
+
+export type SendMessageOptions = {
+  modelId?: string;
+  contextMode?: 'inherit' | 'none';
+  branchParentId?: string | null;
+};

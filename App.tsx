@@ -1,7 +1,7 @@
 //n
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { useNavigate, useLocation, Routes, Route } from 'react-router-dom';
-import { ChatState, ChatNode, Message } from './types';
+import { ChatState, ChatNode, Message, SendMessageOptions } from './types';
 import { ChatView, BranchMetadata } from './components/ChatView';
 import { NodeView } from './components/NodeView';
 import { ProfileView } from './components/ProfileView';
@@ -314,14 +314,17 @@ const App: React.FC = () => {
     }
   };
 
-  const handleSendMessage = async (text: string, files: File[], branchMetadata?: BranchMetadata, thinking?: boolean) => {
+  const handleSendMessage = async (text: string, files: File[], branchMetadata?: BranchMetadata, thinking?: boolean, options?: SendMessageOptions) => {
     if (isGenerating || (!text.trim() && files.length === 0)) return; console.log('🚀 [START] Message send initiated');
     const perfStart = performance.now();
     setIsGenerating(true);
     let currentConvId = activeConvId;
     const isNewConversation = !currentConvId;
-    const isBranching = !!workspace.branchingFromId;
     const timestamp = Date.now();
+    const effectiveBranchParentId = options?.branchParentId ?? workspace.branchingFromId;
+    const isBranching = !!effectiveBranchParentId;
+    const modelForTurn = options?.modelId ?? selectedModel;
+    const contextMode = options?.contextMode ?? 'inherit';
 
     // 1. GENERATE IDS ON CLIENT (The "Forever" IDs)
     // We use crypto.randomUUID() to generate a real UUID v4 immediately.
@@ -333,7 +336,7 @@ const App: React.FC = () => {
       ? clientGeneratedNodeId
       : workspace.currentNodeId!;
 
-    const capturedParentId = isBranching ? workspace.branchingFromId : null;
+    const capturedParentId = isBranching ? effectiveBranchParentId : null;
     const capturedHLabel = generateHierarchicalLabel(capturedParentId, workspace.nodes);
     setGeneratingNodeId(targetNodeId);
 
@@ -411,7 +414,9 @@ const App: React.FC = () => {
       // 3. GENERATE AI RESPONSE (Stream into the view)
       // Build context
       let aiContext;
-      if (isNewConversation || isBranching) {
+      if (contextMode === 'none') {
+        aiContext = [];
+      } else if (isNewConversation || isBranching) {
         const parentHistory = getFullHistoryPath(capturedParentId);
         // Map to standard OpenRouter format
         aiContext = parentHistory.flatMap(n =>
@@ -529,7 +534,7 @@ const App: React.FC = () => {
       // Save Messages + usage accounting
       await dbService.saveCompletedTurn({
         nodes_id: targetNodeId,
-        model: selectedModel,
+        model: modelForTurn,
         input_tokens: usage?.inputTokens ?? 0,
         output_tokens: usage?.outputTokens ?? 0,
         user_message: {
@@ -617,7 +622,7 @@ const App: React.FC = () => {
   };
 
 
-  const handleSendMessageToNode = useCallback(async (nodeId: string, text: string, files: File[], thinking?: boolean) => {
+  const handleSendMessageToNode = useCallback(async (nodeId: string, text: string, files: File[], thinking?: boolean, options?: SendMessageOptions) => {
     // Temporarily switch currentNodeId to the branch node, send, then restore
     // We do this by saving branchingFromId state and re-using handleSendMessage logic
     // but targeting a specific existing node
@@ -648,16 +653,20 @@ const App: React.FC = () => {
 
     try {
       // Build context for this node's full history path
+      const modelForTurn = options?.modelId ?? selectedModel;
+      const contextMode = options?.contextMode ?? 'inherit';
       const historyPath = getFullHistoryPath(targetNodeId);
-      const aiContext = historyPath.flatMap(n =>
-        n.messages.map(m => ({ role: m.role === 'model' ? 'assistant' : 'user', content: m.content }))
-      );
+      const aiContext = contextMode === 'none'
+        ? []
+        : historyPath.flatMap(n =>
+          n.messages.map(m => ({ role: m.role === 'model' ? 'assistant' : 'user', content: m.content }))
+        );
 
       const result = await generateResponse(
         text,
         aiContext as any,
         files,
-        selectedModel,
+        modelForTurn,
         thinking
       );
 
@@ -705,7 +714,7 @@ const App: React.FC = () => {
       // Save messages + usage accounting to DB
       await dbService.saveCompletedTurn({
         nodes_id: targetNodeId,
-        model: selectedModel,
+        model: modelForTurn,
         input_tokens: usage?.inputTokens ?? 0,
         output_tokens: usage?.outputTokens ?? 0,
         user_message: {
