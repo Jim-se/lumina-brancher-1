@@ -61,7 +61,7 @@ const syncUserRecord = async (user: User) => {
     updates.full_name = user.user_metadata.full_name;
   }
 
-  if (existing.tier !== 'FREE') {
+  if (!existing.tier) {
     updates.tier = 'FREE';
   }
 

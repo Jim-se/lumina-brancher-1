@@ -6,7 +6,7 @@
 const getApiUrl = () => {
     // 1. Try standard Vite injection
     // 2. Try process.env (forced injection from vite.config.ts)
-    // 3. Hardcoded fallback for your production environment if others fail
+    // 3. Hardcoded fallback for production if others fail
     const rawUrl =
         import.meta.env.VITE_API_URL ||
         (process as any).env?.VITE_API_URL ||
@@ -25,8 +25,4 @@ if (typeof window !== 'undefined') {
     (window as any).DEBUG_API_URL = API_BASE_URL;
 }
 
-if (import.meta.env.PROD) {
-    console.log(`🚀 Production Build: Calling backend at ${API_BASE_URL}`);
-} else {
-    console.log(`🛠️ Development Build: Calling backend at ${API_BASE_URL}`);
-}
+// Intentionally no console logging; usage logs live elsewhere.

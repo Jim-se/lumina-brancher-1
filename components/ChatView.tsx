@@ -437,16 +437,7 @@ function useBranchInteraction(
       }
     }
 
-    // 3. Log it immediately on click!
-    console.log('Floating Composer Clicked Math:', {
-      messageId,
-      blockId,
-      relativeYInBlock: Number(relativeYInBlock.toFixed(4)),
-      textSnippet,
-      promptText: "" // Empty since the user hasn't typed anything yet
-    });
-
-    // 4. Proceed to open the composer
+    // Proceed to open the composer
     setActiveBranch({
       y: relY,
       nodeId: closestNodeId,
@@ -568,16 +559,7 @@ function useBranchInteraction(
       }
     }
 
-    // 1. Log the requested data
-    console.log('Floating Composer Submit Math:', {
-      messageId,
-      blockId,
-      relativeYInBlock: Number(relativeYInBlock.toFixed(4)),
-      textSnippet,
-      promptText: text
-    });
-
-    // 2. Call the EXACT same submit function as the main bottom input!
+    // Call the EXACT same submit function as the main bottom input!
     if (onSendMessage) {
       onSendMessage(text, files, activeBranch.metadata);
     }
@@ -605,8 +587,8 @@ const MODELS: ModelOption[] = [
   { id: 'arcee-ai/trinity-large-preview:free', name: 'Trinity Large (Free)', provider: 'arcee', description: 'Advanced preview model from Arcee AI', isPremium: false, smartLoading: false },
   { id: 'openai/gpt-5.3', name: 'GPT 5.3', provider: 'openai', description: 'Next-generation reasoning model with unprecedented scale', isPremium: true, supportsThinkingTrace: true, smartLoading: true },
   { id: 'openai/gpt-5.2', name: 'GPT 5.2', provider: 'openai', description: 'Highly efficient, ultra-intelligent foundation model', isPremium: true, supportsThinkingTrace: true, smartLoading: true },
-  { id: 'google/gemini-3.1-pro', name: 'Gemini 3.1 Pro', provider: 'google', description: 'Multimodal flagship with advanced logical planning', isPremium: true, smartLoading: true },
-  { id: 'google/gemini-3-flash', name: 'Gemini 3 Flash', provider: 'google', description: 'Ultrafast response with broad knowledge base', isPremium: false, smartLoading: false },
+  { id: 'google/gemini-3.1-pro-preview', name: 'Gemini 3.1 Pro', provider: 'google', description: 'Multimodal flagship with advanced logical planning', isPremium: true, smartLoading: true },
+  { id: 'google/gemini-3-flash-preview', name: 'Gemini 3 Flash', provider: 'google', description: 'Ultrafast response with broad knowledge base', isPremium: false, smartLoading: false },
   { id: 'anthropic/claude-4.6-sonnet', name: 'Claude Sonnet 4.6', provider: 'anthropic', description: 'State-of-the-art coding and creative assistance', isPremium: true, smartLoading: true },
   { id: 'anthropic/claude-4.6-opus', name: 'Claude Opus 4.6', provider: 'anthropic', description: 'Maximum intelligence for complex scientific tasks', isPremium: true, smartLoading: true },
   { id: 'moonshot/kimi-k2.5-thinking', name: 'Kimi K2.5 Thinking', provider: 'moonshot', description: 'Extended chain-of-thought processing', isPremium: true, thinkingOnly: true, supportsThinkingTrace: true, smartLoading: true },
@@ -712,39 +694,48 @@ const ThinkingTracePanel: React.FC<{
   }
 
   return (
-    <div className={`mb-3 rounded-2xl border border-zinc-200/60 bg-zinc-50/50 overflow-hidden ${compact ? 'mb-2 rounded-xl' : ''}`}>
+    <div className={`mb-3 flex flex-col items-start ${compact ? 'mb-2' : ''}`}>
       <button
         type="button"
         onClick={() => setIsExpanded((prev) => !prev)}
-        className={`w-full flex items-center justify-between gap-3 px-3 py-2 text-left transition-colors hover:bg-zinc-100/50 ${compact ? 'px-2.5 py-1.5' : ''}`}
+        className={`group flex items-center gap-2 rounded-full border border-zinc-200/60 bg-white/50 px-3 py-1.5 transition-all hover:bg-zinc-50 hover:border-zinc-300 shadow-sm ${compact ? 'px-2.5 py-1' : ''}`}
       >
-        <div className="flex items-center gap-2 min-w-0">
-          <div className={`rounded-full bg-zinc-200 text-zinc-500 flex items-center justify-center ${compact ? 'w-6 h-6' : 'w-7 h-7'}`}>
-            <svg className={`${isStreaming ? 'animate-pulse' : ''} ${compact ? 'w-3.5 h-3.5' : 'w-4 h-4'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <div className={`relative flex items-center justify-center text-zinc-500 ${isStreaming ? 'text-blue-500' : ''}`}>
+          {isStreaming ? (
+            <svg className={`animate-spin ${compact ? 'w-3.5 h-3.5' : 'w-4 h-4'}`} fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+            </svg>
+          ) : (
+            <svg className={`${compact ? 'w-3.5 h-3.5' : 'w-4 h-4'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
-          </div>
-          <div className="min-w-0">
-            <p className={`font-semibold text-zinc-700 ${compact ? 'text-[10px]' : 'text-xs uppercase tracking-[0.16em]'}`}>
-              {isStreaming ? 'Thinking...' : 'Thought'}
-            </p>
-            {!compact && (
-              <p className="text-zinc-500/80 truncate text-[10px]">
-                {isStreaming ? 'Analyzing and reasoning' : 'Click to inspect the model trace'}
-              </p>
-            )}
-          </div>
+          )}
         </div>
-        <svg className={`shrink-0 text-zinc-400 transition-transform ${isExpanded ? 'rotate-180' : ''} ${compact ? 'w-3.5 h-3.5' : 'w-4 h-4'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+
+        <span className={`font-medium text-zinc-600 ${compact ? 'text-[10px]' : 'text-xs'}`}>
+          {isStreaming ? 'Thinking...' : 'Thought Process'}
+        </span>
+
+        <svg
+          className={`shrink-0 text-zinc-400 transition-transform duration-300 ease-out group-hover:text-zinc-600 ${isExpanded ? 'rotate-180' : ''} ${compact ? 'w-3 h-3' : 'w-3.5 h-3.5'}`}
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
         </svg>
       </button>
 
-      {isExpanded && (
-        <div className={`border-t border-zinc-200/60 bg-white/40 ${compact ? 'px-2.5 py-2' : 'px-4 py-3'}`}>
-          <MiniMarkdown content={trace} />
+      <div
+        className={`grid transition-[grid-template-rows,opacity,margin] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] will-change-[grid-template-rows,margin] ${isExpanded ? 'grid-rows-[1fr] opacity-100 mt-3' : 'grid-rows-[0fr] opacity-0 mt-0'}`}
+      >
+        <div className="overflow-hidden">
+          <div className={`ml-3.5 border-l-2 border-zinc-200/80 pl-4 py-1 text-zinc-600/90 ${compact ? 'ml-3 pl-3' : ''}`}>
+            <MiniMarkdown content={trace} />
+          </div>
         </div>
-      )}
+      </div>
     </div>
   );
 };

@@ -21,6 +21,53 @@ interface Conversation {
 }
 
 const STORAGE_KEY = 'lumina_conversations_v2'; // Bumped version for logic change
+
+const formatUsd = (value: any) => {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return '$0';
+  return `$${num.toFixed(6)}`;
+};
+
+const formatCapLine = (label: string, spend: any, limit: any) => {
+  const spendNum = Number(spend);
+  const limitNum = limit == null ? null : Number(limit);
+
+  if (!Number.isFinite(spendNum)) {
+    return `${label}: n/a`;
+  }
+
+  if (limitNum == null || !Number.isFinite(limitNum) || limitNum <= 0) {
+    return `${label}: ${formatUsd(spendNum)} / ∞`;
+  }
+
+  const pct = Math.min(999, Math.max(0, (spendNum / limitNum) * 100));
+  const remaining = Math.max(0, limitNum - spendNum);
+  return `${label}: ${formatUsd(spendNum)} / ${formatUsd(limitNum)} (${pct.toFixed(1)}%) remaining ${formatUsd(remaining)}`;
+};
+
+const logTurnUsage = (turnResult: any) => {
+  if (!turnResult) return;
+  const usage = turnResult.usage;
+  const caps = turnResult.caps;
+  if (!usage) return;
+
+  const inTok = Number(usage.input_tokens ?? 0);
+  const outTok = Number(usage.output_tokens ?? 0);
+  const totalCost = Number(usage.total_cost ?? 0);
+
+  const capParts: string[] = [];
+  if (caps) {
+    capParts.push(formatCapLine('4h', caps.four_hour_spend, caps.four_hour_limit));
+    capParts.push(formatCapLine('month', caps.monthly_spend, caps.monthly_limit));
+  }
+
+  console.log(
+    `[USAGE] in=${Number.isFinite(inTok) ? inTok : 0} out=${Number.isFinite(outTok) ? outTok : 0} cost=${formatUsd(totalCost)}` +
+    (caps?.plan ? ` plan=${caps.plan}` : '') +
+    (capParts.length ? ` | ${capParts.join(' | ')}` : '')
+  );
+};
+
 const App: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -112,20 +159,7 @@ const App: React.FC = () => {
     // 3. Filter out empty groups so we don't render empty headers
     return Object.entries(groups).filter(([_, convs]) => convs.length > 0);
   }, [conversations]);
-  // Add this near the top of your App component, after the useState declarations:
-
-  useEffect(() => {
-    if (!import.meta.env.DEV) {
-      return;
-    }
-
-    console.log('🔍 [WORKSPACE UPDATE]');
-    console.log('  - Total nodes:', Object.keys(workspace.nodes).length);
-    console.log('  - Node IDs:', Object.keys(workspace.nodes));
-    console.log('  - Current node:', workspace.currentNodeId);
-    console.log('  - Root node:', workspace.rootNodeId);
-    console.log('  - Branching from:', workspace.branchingFromId);
-  }, [workspace.nodes, workspace.currentNodeId, workspace.rootNodeId, workspace.branchingFromId]);
+  // Removed noisy workspace logging (it fired on every streamed delta).
 
   useEffect(() => {
     const loadSidebar = async () => {
@@ -276,8 +310,6 @@ const App: React.FC = () => {
   };
 
   const handleSelectConversation = async (id: string | null) => {
-    console.log('🔍 handleSelectConversation called! id:', id, 'activeConvId:', activeConvId);
-
     // Auto-collapse sidebar on mobile when selecting a chat
     if (typeof window !== 'undefined' && window.innerWidth < 768) {
       setSidebarCollapsed(true);
@@ -285,7 +317,6 @@ const App: React.FC = () => {
 
     // Don't reload if we're already on this conversation
     if (id === activeConvId) {
-      console.log('⏭️ Skipping - already active');
       return;
     }
     setActiveConvId(id);
@@ -324,7 +355,7 @@ const App: React.FC = () => {
   };
 
   const handleSendMessage = async (text: string, files: File[], branchMetadata?: BranchMetadata, thinking?: boolean, options?: SendMessageOptions) => {
-    if (isGenerating || (!text.trim() && files.length === 0)) return; console.log('🚀 [START] Message send initiated');
+    if (isGenerating || (!text.trim() && files.length === 0)) return;
     const perfStart = performance.now();
     setIsGenerating(true);
     let currentConvId = activeConvId;
@@ -362,7 +393,7 @@ const App: React.FC = () => {
 
     // 2. OPTIMISTIC UPDATE (Using the REAL ID)
     if (isNewConversation || isBranching) {
-      console.log('🟢 [OPTIMISTIC] Creating new node with PERMANENT ID:', targetNodeId);
+      // no-op: keep console clean
 
       setWorkspace(prev => {
         const newNodes = {
@@ -498,7 +529,7 @@ const App: React.FC = () => {
         }
       } catch (streamErr: any) {
         if (streamErr.name === 'AbortError' || streamErr.message?.includes('abort') || streamErr.message?.toLowerCase().includes('cancel')) {
-          console.log("Stream intentionally aborted. Proceeding to save partial message...");
+          // no-op: user canceled
         } else {
           throw streamErr;
         }
@@ -541,7 +572,7 @@ const App: React.FC = () => {
       }
 
       // Save Messages + usage accounting
-      await dbService.saveCompletedTurn({
+      const turnResult = await dbService.saveCompletedTurn({
         nodes_id: targetNodeId,
         model: modelForTurn,
         input_tokens: usage?.inputTokens ?? 0,
@@ -556,6 +587,10 @@ const App: React.FC = () => {
           ordinal: aiMsg.ordinal
         }
       });
+
+      if (import.meta.env.DEV) {
+        logTurnUsage(turnResult);
+      }
 
       // Update Pointers
       // Update Pointers
@@ -576,12 +611,12 @@ const App: React.FC = () => {
       const sidebarData = await dbService.fetchConversations();
       setConversations(sidebarData);
 
-      console.log(`✅ [COMPLETE] Total time: ${(performance.now() - perfStart).toFixed(0)}ms`);
+      // no-op: keep console clean
 
       if (isNewConversation || isBranching) {
         generateTitle(text, fullResponse, selectedModel).then(async (llmTitle) => {
           try {
-            console.log("🏷️ Generated Title:", llmTitle);
+            // no-op: keep console clean
 
             // A. Update Database
             await dbService.updateNodeTitle(targetNodeId, llmTitle);
@@ -709,7 +744,7 @@ const App: React.FC = () => {
         }
       } catch (streamErr: any) {
         if (streamErr.name === 'AbortError' || streamErr.message?.includes('abort') || streamErr.message?.toLowerCase().includes('cancel')) {
-          console.log('Stream intentionally aborted in mini chat');
+          // no-op: user canceled
         } else {
           throw streamErr;
         }
@@ -721,7 +756,7 @@ const App: React.FC = () => {
       const usage = result.getUsage?.();
 
       // Save messages + usage accounting to DB
-      await dbService.saveCompletedTurn({
+      const turnResult = await dbService.saveCompletedTurn({
         nodes_id: targetNodeId,
         model: modelForTurn,
         input_tokens: usage?.inputTokens ?? 0,
@@ -737,7 +772,11 @@ const App: React.FC = () => {
         }
       });
 
-      console.log(`✅ [BRANCH MINI CHAT] Total time: ${(performance.now() - perfStart).toFixed(0)}ms`);
+      if (import.meta.env.DEV) {
+        logTurnUsage(turnResult);
+      }
+
+      // no-op: keep console clean
     } catch (err: any) {
       console.error('Mini chat send failed:', err);
       setIsGenerating(false);
