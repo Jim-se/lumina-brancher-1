@@ -1017,12 +1017,13 @@ export const ChatView: React.FC<ChatViewProps> = ({
   const { mode } = useTheme();
   const [input, setInput] = useState('');
   const [files, setFiles] = useState<File[]>([]);
-  const [selectedTextData, setSelectedTextData] = useState<{ text: string; x: number; y: number; messageId: string; nodeId: string; blockId: string; blockIndex: number; relativeYInBlock: number; msgRelativeY: number } | null>(null);
+  const [selectedTextData, setSelectedTextData] = useState<{ text: string; x: number; y: number; absoluteY: number; isDoubleClick: boolean; messageId: string; nodeId: string; blockId: string; blockIndex: number; relativeYInBlock: number; msgRelativeY: number } | null>(null);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
     const handleMouseUp = (e: MouseEvent) => {
+      const isDoubleClick = e.detail >= 2;
       setTimeout(() => {
         const selection = window.getSelection();
 
@@ -1059,6 +1060,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
         const messageId = msgEl.getAttribute('data-message-id') || '';
         const nodeId = msgEl.getAttribute('data-node-id') || '';
         const selectionMidY = rect.top + (rect.height / 2);
+        const absoluteY = selectionMidY;
         const msgRelativeY = selectionMidY - msgEl.getBoundingClientRect().top;
 
         let blockId = 'unknown';
@@ -1114,6 +1116,8 @@ export const ChatView: React.FC<ChatViewProps> = ({
           text: selection.toString().trim(),
           x,
           y,
+          absoluteY,
+          isDoubleClick,
           messageId,
           nodeId,
           blockId,
@@ -1384,7 +1388,6 @@ export const ChatView: React.FC<ChatViewProps> = ({
                 return;
               }
 
-              const prompt = `what is ${trimmed}?`;
               const metadata: BranchMetadata = {
                 messageId: selectedTextData.messageId,
                 blockId: selectedTextData.blockId,
@@ -1394,11 +1397,26 @@ export const ChatView: React.FC<ChatViewProps> = ({
                 msgRelativeY: selectedTextData.msgRelativeY
               };
 
-              handleBranchMessage(prompt, [], metadata, {
-                branchParentId: selectedTextData.nodeId,
-                modelId: 'google/gemini-3-flash',
-                contextMode: 'none'
-              });
+              if (selectedTextData.isDoubleClick) {
+                const prompt = `what is ${trimmed}?`;
+
+                handleBranchMessage(prompt, [], metadata, {
+                  branchParentId: selectedTextData.nodeId,
+                  modelId: 'google/gemini-3-flash',
+                  contextMode: 'none'
+                });
+              } else {
+                const contentRect = contentRef.current?.getBoundingClientRect();
+                const relY = contentRect ? selectedTextData.absoluteY - contentRect.top : 0;
+
+                document.dispatchEvent(new CustomEvent('open-branch-with-selection', {
+                  detail: {
+                    y: relY,
+                    nodeId: selectedTextData.nodeId,
+                    metadata
+                  }
+                }));
+              }
 
               setSelectedTextData(null);
             }}
@@ -1410,7 +1428,9 @@ export const ChatView: React.FC<ChatViewProps> = ({
               </svg>
             </div>
             <span className="pr-1 tracking-wide truncate max-w-[200px]">
-              What is "{selectedTextData.text.length > 15 ? selectedTextData.text.substring(0, 15) + '...' : selectedTextData.text}"?
+              {selectedTextData.isDoubleClick
+                ? `What is "${selectedTextData.text.length > 15 ? selectedTextData.text.substring(0, 15) + '...' : selectedTextData.text}"?`
+                : "Create new branch"}
             </span>
           </button>
         </div>

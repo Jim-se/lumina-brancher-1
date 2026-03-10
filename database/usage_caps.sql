@@ -173,7 +173,7 @@ begin
   select ul.four_hour_limit, ul.monthly_limit
     into v_four_hour_limit, v_monthly_limit
   from public.usage_limits ul
-  where ul.plan = v_plan
+  where lower(ul.plan) = lower(v_plan)
   order by ul.created_at desc
   limit 1;
 
@@ -386,7 +386,7 @@ begin
   select ul.four_hour_limit, ul.monthly_limit
     into v_four_hour_limit, v_monthly_limit
   from public.usage_limits ul
-  where ul.plan = v_plan
+  where lower(ul.plan) = lower(v_plan)
   order by ul.created_at desc
   limit 1;
 
